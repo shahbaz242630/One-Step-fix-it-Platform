@@ -39,8 +39,10 @@ async function initializeDatabase() {
       vat_collected INTEGER DEFAULT 0,
       profit_loss TEXT DEFAULT 'Profit',
       status TEXT DEFAULT 'active',
+      start_date TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      completed_at TEXT
+      completed_at TEXT,
+      duration_days INTEGER DEFAULT 0
     )
   `);
 
@@ -82,8 +84,10 @@ async function initializeDatabase() {
       company_profit REAL NOT NULL,
       vat_collected INTEGER DEFAULT 0,
       status TEXT DEFAULT 'active',
+      start_date TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      completed_at TEXT
+      completed_at TEXT,
+      duration_days INTEGER DEFAULT 0
     )
   `);
 
@@ -190,7 +194,8 @@ function addProject(project) {
     project_details,
     total_value_with_vat,
     advance_paid = 0,
-    num_project_managers = 0
+    num_project_managers = 0,
+    start_date = new Date().toISOString().split('T')[0] // Default to today
   } = project;
 
   // Calculate VAT (extract 5% from total)
@@ -202,14 +207,14 @@ function addProject(project) {
     INSERT INTO projects (
       client_name, address, project_details, total_value_with_vat,
       vat_amount, project_value, advance_paid, balance_due,
-      company_profit, num_project_managers, pm_payment_due
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      company_profit, num_project_managers, pm_payment_due, start_date
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.bind([
     client_name, address, project_details, total_value_with_vat,
     vat_amount, project_value, advance_paid, balance_due,
-    project_value, num_project_managers, 0
+    project_value, num_project_managers, 0, start_date
   ]);
   stmt.step();
   stmt.free();
@@ -256,7 +261,8 @@ function updateProject(id, updates) {
     advance_paid,
     num_project_managers,
     status,
-    completed_at
+    completed_at,
+    start_date
   } = { ...project, ...updates };
 
   const vat_amount = total_value_with_vat * (5 / 105);
@@ -279,6 +285,14 @@ function updateProject(id, updates) {
     pm_payment_due = (company_profit * 0.5) / num_project_managers;
   }
 
+  // Calculate duration if project is being completed
+  let duration_days = project.duration_days || 0;
+  if (status === 'completed' && project.status !== 'completed' && start_date) {
+    const startDate = new Date(start_date);
+    const endDate = new Date(completed_at);
+    duration_days = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
+  }
+
   const updateStmt = db.prepare(`
     UPDATE projects SET
       total_value_with_vat = ?,
@@ -290,14 +304,16 @@ function updateProject(id, updates) {
       num_project_managers = ?,
       pm_payment_due = ?,
       status = ?,
-      completed_at = ?
+      start_date = ?,
+      completed_at = ?,
+      duration_days = ?
     WHERE id = ?
   `);
 
   updateStmt.bind([
     total_value_with_vat, vat_amount, project_value, advance_paid,
     balance_due, company_profit, num_project_managers, pm_payment_due,
-    status, completed_at, id
+    status, start_date, completed_at, duration_days, id
   ]);
   updateStmt.step();
   updateStmt.free();
