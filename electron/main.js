@@ -79,6 +79,9 @@ ipcMain.handle('update-pm-payment', (event, id, isPaid) => db.updatePMPayment(id
 // VAT Records
 ipcMain.handle('get-vat-records', () => db.getVATRecords());
 ipcMain.handle('update-vat-paid', (event, id, isPaid) => db.updateVATPaid(id, isPaid));
+ipcMain.handle('get-quarterly-vat-summary', () => db.getQuarterlyVATSummary());
+ipcMain.handle('update-input-vat', (event, quarter, year, inputVAT, notes) => db.updateInputVAT(quarter, year, inputVAT, notes));
+ipcMain.handle('mark-quarter-vat-paid', (event, quarter, year, isPaid) => db.markQuarterVATPaid(quarter, year, isPaid));
 
 // Dashboard Stats
 ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());

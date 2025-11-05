@@ -123,6 +123,20 @@ async function initializeDatabase() {
   `);
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS vat_quarters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quarter TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      input_vat REAL DEFAULT 0,
+      is_paid INTEGER DEFAULT 0,
+      date_paid TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(quarter, year)
+    )
+  `);
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       starting_balance REAL DEFAULT 0,
@@ -684,6 +698,129 @@ function updateVATPaid(id, isPaid) {
   return true;
 }
 
+// ========== QUARTERLY VAT SUMMARY ==========
+
+function getQuarterlyVATSummary() {
+  // Get all unique quarter/year combinations from vat_records
+  const quartersStmt = db.prepare(`
+    SELECT DISTINCT quarter, year
+    FROM vat_records
+    ORDER BY year DESC,
+      CASE quarter
+        WHEN 'Q1' THEN 1
+        WHEN 'Q2' THEN 2
+        WHEN 'Q3' THEN 3
+        WHEN 'Q4' THEN 4
+      END DESC
+  `);
+
+  const summaries = [];
+
+  while (quartersStmt.step()) {
+    const row = quartersStmt.getAsObject();
+    const quarter = row.quarter;
+    const year = row.year;
+
+    // Get output VAT (collected from clients)
+    const outputStmt = db.prepare(`
+      SELECT SUM(vat_amount) as total
+      FROM vat_records
+      WHERE quarter = ? AND year = ?
+    `);
+    outputStmt.bind([quarter, year]);
+    outputStmt.step();
+    const outputVAT = outputStmt.getAsObject().total || 0;
+    outputStmt.free();
+
+    // Get or create quarterly record for input VAT
+    let quarterRecord = getOrCreateQuarterRecord(quarter, year);
+
+    const inputVAT = quarterRecord.input_vat || 0;
+    const netPayable = outputVAT - inputVAT;
+    const isPaid = quarterRecord.is_paid === 1;
+
+    summaries.push({
+      quarter,
+      year,
+      output_vat: outputVAT,
+      input_vat: inputVAT,
+      net_payable: netPayable,
+      is_paid: isPaid,
+      date_paid: quarterRecord.date_paid,
+      notes: quarterRecord.notes,
+      quarter_id: quarterRecord.id
+    });
+  }
+  quartersStmt.free();
+
+  return summaries;
+}
+
+function getOrCreateQuarterRecord(quarter, year) {
+  // Try to get existing record
+  const stmt = db.prepare('SELECT * FROM vat_quarters WHERE quarter = ? AND year = ?');
+  stmt.bind([quarter, year]);
+
+  if (stmt.step()) {
+    const record = stmt.getAsObject();
+    stmt.free();
+    return record;
+  }
+  stmt.free();
+
+  // Create new record if doesn't exist
+  const insertStmt = db.prepare(`
+    INSERT INTO vat_quarters (quarter, year, input_vat, is_paid)
+    VALUES (?, ?, 0, 0)
+  `);
+  insertStmt.bind([quarter, year]);
+  insertStmt.step();
+  insertStmt.free();
+
+  // Get the newly created record
+  const getStmt = db.prepare('SELECT * FROM vat_quarters WHERE quarter = ? AND year = ?');
+  getStmt.bind([quarter, year]);
+  getStmt.step();
+  const record = getStmt.getAsObject();
+  getStmt.free();
+
+  saveDatabase();
+  return record;
+}
+
+function updateInputVAT(quarter, year, inputVAT, notes) {
+  const record = getOrCreateQuarterRecord(quarter, year);
+
+  const stmt = db.prepare(`
+    UPDATE vat_quarters
+    SET input_vat = ?, notes = ?
+    WHERE quarter = ? AND year = ?
+  `);
+  stmt.bind([inputVAT, notes || '', quarter, year]);
+  stmt.step();
+  stmt.free();
+
+  saveDatabase();
+  return true;
+}
+
+function markQuarterVATPaid(quarter, year, isPaid) {
+  const record = getOrCreateQuarterRecord(quarter, year);
+  const datePaid = isPaid ? new Date().toISOString() : null;
+
+  const stmt = db.prepare(`
+    UPDATE vat_quarters
+    SET is_paid = ?, date_paid = ?
+    WHERE quarter = ? AND year = ?
+  `);
+  stmt.bind([isPaid ? 1 : 0, datePaid, quarter, year]);
+  stmt.step();
+  stmt.free();
+
+  saveDatabase();
+  return true;
+}
+
 // ========== DASHBOARD STATS ==========
 
 function getDashboardStats() {
@@ -726,25 +863,68 @@ function getDashboardStats() {
   const pmPaymentsMade = pmStmt.getAsObject();
   pmStmt.free();
 
-  // Get VAT paid
-  const vatPaidStmt = db.prepare('SELECT SUM(vat_amount) as total FROM vat_records WHERE is_paid = 1');
-  vatPaidStmt.step();
-  const vatPaid = vatPaidStmt.getAsObject();
-  vatPaidStmt.free();
+  // Calculate NET VAT paid (for paid quarters only)
+  let totalNetVATPaid = 0;
+  const paidQuartersStmt = db.prepare('SELECT quarter, year FROM vat_quarters WHERE is_paid = 1');
+  while (paidQuartersStmt.step()) {
+    const paidQuarter = paidQuartersStmt.getAsObject();
 
-  // Get current quarter VAT owed (not paid)
-  const { quarter, year } = getQuarterFromDate(new Date());
-  const currentVATStmt = db.prepare(`
-    SELECT SUM(vat_amount) as total FROM vat_records
-    WHERE is_paid = 0 AND quarter = ? AND year = ?
-  `);
-  currentVATStmt.bind([quarter, year]);
-  currentVATStmt.step();
-  const currentQuarterVAT = currentVATStmt.getAsObject();
-  currentVATStmt.free();
+    // Get output VAT for this quarter
+    const outputStmt = db.prepare('SELECT SUM(vat_amount) as total FROM vat_records WHERE quarter = ? AND year = ?');
+    outputStmt.bind([paidQuarter.quarter, paidQuarter.year]);
+    outputStmt.step();
+    const outputVAT = outputStmt.getAsObject().total || 0;
+    outputStmt.free();
 
-  const bankBalance = starting_balance + (projectPayments.total || 0) + (contractorPayments.total || 0) - totalExpenses - (pmPaymentsMade.total || 0) - (vatPaid.total || 0);
-  const vatOwed = (currentQuarterVAT.total || 0) + initial_vat;
+    // Get input VAT for this quarter
+    const inputStmt = db.prepare('SELECT input_vat FROM vat_quarters WHERE quarter = ? AND year = ?');
+    inputStmt.bind([paidQuarter.quarter, paidQuarter.year]);
+    inputStmt.step();
+    const inputVAT = inputStmt.getAsObject().input_vat || 0;
+    inputStmt.free();
+
+    totalNetVATPaid += (outputVAT - inputVAT);
+  }
+  paidQuartersStmt.free();
+
+  // Calculate NET VAT owed (for unpaid quarters)
+  let totalNetVATOwed = initial_vat;
+
+  // Get all unique quarters that have VAT records
+  const allQuartersStmt = db.prepare('SELECT DISTINCT quarter, year FROM vat_records ORDER BY year DESC, quarter DESC');
+  while (allQuartersStmt.step()) {
+    const quarterData = allQuartersStmt.getAsObject();
+
+    // Check if this quarter is paid
+    const paidCheckStmt = db.prepare('SELECT is_paid FROM vat_quarters WHERE quarter = ? AND year = ?');
+    paidCheckStmt.bind([quarterData.quarter, quarterData.year]);
+
+    let isPaid = 0;
+    if (paidCheckStmt.step()) {
+      isPaid = paidCheckStmt.getAsObject().is_paid || 0;
+    }
+    paidCheckStmt.free();
+
+    // If not paid, add to owed
+    if (isPaid === 0) {
+      // Get output VAT
+      const outputStmt = db.prepare('SELECT SUM(vat_amount) as total FROM vat_records WHERE quarter = ? AND year = ?');
+      outputStmt.bind([quarterData.quarter, quarterData.year]);
+      outputStmt.step();
+      const outputVAT = outputStmt.getAsObject().total || 0;
+      outputStmt.free();
+
+      // Get input VAT (create record if doesn't exist)
+      const quarterRecord = getOrCreateQuarterRecord(quarterData.quarter, quarterData.year);
+      const inputVAT = quarterRecord.input_vat || 0;
+
+      totalNetVATOwed += (outputVAT - inputVAT);
+    }
+  }
+  allQuartersStmt.free();
+
+  const bankBalance = starting_balance + (projectPayments.total || 0) + (contractorPayments.total || 0) - totalExpenses - (pmPaymentsMade.total || 0) - totalNetVATPaid;
+  const vatOwed = totalNetVATOwed;
   const ownerBalance = bankBalance - vatOwed - totalDeposits;
 
   return {
@@ -1120,6 +1300,9 @@ module.exports = {
   updatePMPayment,
   getVATRecords,
   updateVATPaid,
+  getQuarterlyVATSummary,
+  updateInputVAT,
+  markQuarterVATPaid,
   getDashboardStats,
   getFinancialSummary,
   getSettings,
