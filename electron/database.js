@@ -813,6 +813,31 @@ function saveSettings(settings) {
   return true;
 }
 
+function resetAllData() {
+  // Delete all data from all tables
+  db.run('DELETE FROM project_expenses');
+  db.run('DELETE FROM pm_payments');
+  db.run('DELETE FROM vat_records');
+  db.run('DELETE FROM projects');
+  db.run('DELETE FROM company_expenses');
+  db.run('DELETE FROM contractor_projects');
+
+  // Reset settings to zero
+  const stmt = db.prepare(`
+    UPDATE settings SET
+      starting_balance = 0,
+      initial_deposits = 0,
+      initial_vat = 0,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = 1
+  `);
+  stmt.step();
+  stmt.free();
+
+  saveDatabase();
+  return true;
+}
+
 // ========== UTILITY FUNCTIONS ==========
 
 function getQuarterFromDate(date) {
@@ -849,5 +874,6 @@ module.exports = {
   getDashboardStats,
   getFinancialSummary,
   getSettings,
-  saveSettings
+  saveSettings,
+  resetAllData
 };

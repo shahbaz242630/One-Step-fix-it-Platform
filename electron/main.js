@@ -87,3 +87,4 @@ ipcMain.handle('get-financial-summary', () => db.getFinancialSummary());
 // Settings
 ipcMain.handle('get-settings', () => db.getSettings());
 ipcMain.handle('save-settings', (event, settings) => db.saveSettings(settings));
+ipcMain.handle('reset-all-data', () => db.resetAllData());

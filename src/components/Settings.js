@@ -37,6 +37,39 @@ function Settings() {
     }
   };
 
+  const handleResetAll = async () => {
+    const confirmed = window.confirm(
+      '⚠️ WARNING: This will delete ALL data including:\n' +
+      '- All projects (regular and contractor)\n' +
+      '- All expenses\n' +
+      '- All PM payments\n' +
+      '- All VAT records\n' +
+      '- Reset all settings to zero\n\n' +
+      'This CANNOT be undone!\n\n' +
+      'Are you absolutely sure?'
+    );
+
+    if (!confirmed) return;
+
+    const doubleCheck = window.confirm('Are you REALLY sure? This will delete everything!');
+
+    if (!doubleCheck) return;
+
+    try {
+      await ipcRenderer.invoke('reset-all-data');
+      setSettings({
+        starting_balance: 0,
+        initial_deposits: 0,
+        initial_vat: 0
+      });
+      alert('✓ All data has been reset! You can start fresh now.');
+      window.location.reload(); // Reload the app to refresh all pages
+    } catch (error) {
+      console.error('Error resetting data:', error);
+      alert('Error resetting data');
+    }
+  };
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-AE', {
       minimumFractionDigits: 2,
@@ -148,6 +181,33 @@ function Settings() {
               <br />
               (The money you can actually use for business or personal needs)
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="table-container" style={{ maxWidth: '700px', marginTop: '30px', borderColor: '#fc8181', borderWidth: '2px' }}>
+        <div className="table-header" style={{ backgroundColor: '#fef2f2' }}>
+          <h2 style={{ color: '#dc2626' }}>⚠️ Danger Zone</h2>
+        </div>
+        <div style={{ padding: '20px' }}>
+          <div style={{ lineHeight: '1.8', color: '#4a5568' }}>
+            <h4 style={{ color: '#dc2626', marginBottom: '10px' }}>Reset All Data</h4>
+            <p style={{ marginBottom: '20px' }}>
+              This will permanently delete ALL data from the app including all projects, expenses, VAT records, PM payments, and reset all settings to zero.
+              <br />
+              <strong style={{ color: '#dc2626' }}>This action CANNOT be undone!</strong>
+            </p>
+            <p style={{ marginBottom: '20px', fontSize: '14px', color: '#718096' }}>
+              Use this if you have test data or incorrect entries and want to start completely fresh.
+            </p>
+            <button
+              className="btn btn-danger"
+              onClick={handleResetAll}
+              style={{ padding: '12px 30px', fontSize: '15px' }}
+            >
+              🗑️ Reset All Data (Delete Everything)
+            </button>
           </div>
         </div>
       </div>
