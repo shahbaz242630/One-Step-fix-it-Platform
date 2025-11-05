@@ -88,3 +88,6 @@ ipcMain.handle('get-financial-summary', () => db.getFinancialSummary());
 ipcMain.handle('get-settings', () => db.getSettings());
 ipcMain.handle('save-settings', (event, settings) => db.saveSettings(settings));
 ipcMain.handle('reset-all-data', () => db.resetAllData());
+
+// Reports
+ipcMain.handle('get-report-data', (event, period, value) => db.getReportData(period, value));

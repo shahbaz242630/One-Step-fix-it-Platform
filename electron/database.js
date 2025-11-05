@@ -508,7 +508,8 @@ function addContractorProject(project) {
     total_charged_with_vat,
     contractor_name,
     contractor_price,
-    advance_paid = 0
+    advance_paid = 0,
+    start_date = new Date().toISOString().split('T')[0] // Default to today
   } = project;
 
   const vat_amount = total_charged_with_vat * (5 / 105);
@@ -520,14 +521,14 @@ function addContractorProject(project) {
     INSERT INTO contractor_projects (
       client_name, address, project_details, total_charged_with_vat,
       vat_amount, value_excl_vat, contractor_name, contractor_price,
-      advance_paid, balance_due, company_profit
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      advance_paid, balance_due, company_profit, start_date
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.bind([
     client_name, address, project_details, total_charged_with_vat,
     vat_amount, value_excl_vat, contractor_name, contractor_price,
-    advance_paid, balance_due, company_profit
+    advance_paid, balance_due, company_profit, start_date
   ]);
   stmt.step();
   stmt.free();
@@ -573,13 +574,22 @@ function updateContractorProject(id, updates) {
     contractor_price,
     advance_paid,
     status,
-    completed_at
+    completed_at,
+    start_date
   } = { ...project, ...updates };
 
   const vat_amount = total_charged_with_vat * (5 / 105);
   const value_excl_vat = total_charged_with_vat - vat_amount;
   const balance_due = total_charged_with_vat - advance_paid;
   const company_profit = value_excl_vat - contractor_price;
+
+  // Calculate duration if project is being completed
+  let duration_days = project.duration_days || 0;
+  if (status === 'completed' && project.status !== 'completed' && start_date) {
+    const startDate = new Date(start_date);
+    const endDate = new Date(completed_at);
+    duration_days = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
+  }
 
   const updateStmt = db.prepare(`
     UPDATE contractor_projects SET
@@ -591,13 +601,15 @@ function updateContractorProject(id, updates) {
       balance_due = ?,
       company_profit = ?,
       status = ?,
-      completed_at = ?
+      start_date = ?,
+      completed_at = ?,
+      duration_days = ?
     WHERE id = ?
   `);
 
   updateStmt.bind([
     total_charged_with_vat, vat_amount, value_excl_vat, contractor_price,
-    advance_paid, balance_due, company_profit, status, completed_at, id
+    advance_paid, balance_due, company_profit, status, start_date, completed_at, duration_days, id
   ]);
   updateStmt.step();
   updateStmt.free();
@@ -854,6 +866,227 @@ function resetAllData() {
   return true;
 }
 
+// ========== REPORTS ==========
+
+function getReportData(period, value) {
+  // period can be: 'month', 'quarter', 'year'
+  // value depends on period:
+  //   month: 'YYYY-MM' (e.g., '2025-01')
+  //   quarter: 'YYYY-Q#' (e.g., '2025-Q1')
+  //   year: 'YYYY' (e.g., '2025')
+
+  let dateFilter = '';
+  let params = [];
+
+  if (period === 'month') {
+    dateFilter = "strftime('%Y-%m', start_date) = ?";
+    params = [value];
+  } else if (period === 'quarter') {
+    const [year, quarter] = value.split('-');
+    const quarterNum = parseInt(quarter.replace('Q', ''));
+    const startMonth = (quarterNum - 1) * 3 + 1;
+    const endMonth = quarterNum * 3;
+    dateFilter = `cast(strftime('%Y', start_date) as integer) = ? AND cast(strftime('%m', start_date) as integer) BETWEEN ? AND ?`;
+    params = [parseInt(year), startMonth, endMonth];
+  } else if (period === 'year') {
+    dateFilter = "strftime('%Y', start_date) = ?";
+    params = [value];
+  }
+
+  // Get regular projects data
+  const regProjStmt = db.prepare(`
+    SELECT
+      SUM(total_value_with_vat) as turnover,
+      SUM(vat_amount) as vat_collected,
+      SUM(company_profit) as profit,
+      COUNT(*) as count
+    FROM projects
+    WHERE ${dateFilter}
+  `);
+  regProjStmt.bind(params);
+  regProjStmt.step();
+  const regularProjects = regProjStmt.getAsObject();
+  regProjStmt.free();
+
+  // Get contractor projects data
+  const contrProjStmt = db.prepare(`
+    SELECT
+      SUM(total_charged_with_vat) as turnover,
+      SUM(vat_amount) as vat_collected,
+      SUM(company_profit) as profit,
+      COUNT(*) as count
+    FROM contractor_projects
+    WHERE ${dateFilter}
+  `);
+  contrProjStmt.bind(params);
+  contrProjStmt.step();
+  const contractorProjects = contrProjStmt.getAsObject();
+  contrProjStmt.free();
+
+  // Get project expenses for this period
+  const projExpStmt = db.prepare(`
+    SELECT SUM(pe.amount) as total
+    FROM project_expenses pe
+    JOIN projects p ON pe.project_id = p.id
+    WHERE ${dateFilter}
+  `);
+  projExpStmt.bind(params);
+  projExpStmt.step();
+  const projectExpenses = projExpStmt.getAsObject();
+  projExpStmt.free();
+
+  // Get company expenses for this period
+  const compExpStmt = db.prepare(`
+    SELECT SUM(amount) as total
+    FROM company_expenses
+    WHERE strftime('%Y-%m', date) ${period === 'year' ? "LIKE ?" : "= ?"}
+  `);
+  if (period === 'year') {
+    compExpStmt.bind([value + '%']);
+  } else if (period === 'month') {
+    compExpStmt.bind([value]);
+  } else { // quarter
+    const [year, quarter] = value.split('-');
+    const quarterNum = parseInt(quarter.replace('Q', ''));
+    const months = [];
+    for (let i = (quarterNum - 1) * 3 + 1; i <= quarterNum * 3; i++) {
+      months.push(`${year}-${i.toString().padStart(2, '0')}`);
+    }
+    // For quarters, we need to sum across multiple months
+    const compExpStmt2 = db.prepare(`
+      SELECT SUM(amount) as total
+      FROM company_expenses
+      WHERE strftime('%Y-%m', date) IN (?, ?, ?)
+    `);
+    compExpStmt2.bind(months);
+    compExpStmt2.step();
+    const companyExpenses2 = compExpStmt2.getAsObject();
+    compExpStmt2.free();
+
+    // Get VAT paid for this period
+    const { quarter: q, year: y } = value.includes('Q')
+      ? { quarter: value.split('-')[1], year: parseInt(value.split('-')[0]) }
+      : { quarter: null, year: null };
+
+    const vatPaidStmt = db.prepare(`
+      SELECT SUM(vat_amount) as total
+      FROM vat_records
+      WHERE is_paid = 1 AND quarter = ? AND year = ?
+    `);
+    vatPaidStmt.bind([q, y]);
+    vatPaidStmt.step();
+    const vatPaid = vatPaidStmt.getAsObject();
+    vatPaidStmt.free();
+
+    // Get PM payments for this period
+    const pmStmt = db.prepare(`
+      SELECT SUM(pm1_payment + pm2_payment) as total
+      FROM pm_payments pm
+      JOIN projects p ON pm.project_id = p.id
+      WHERE pm.is_paid = 1 AND ${dateFilter}
+    `);
+    pmStmt.bind(params);
+    pmStmt.step();
+    const pmPayments = pmStmt.getAsObject();
+    pmStmt.free();
+
+    return {
+      period,
+      value,
+      turnover: {
+        regular: regularProjects.turnover || 0,
+        contractor: contractorProjects.turnover || 0,
+        total: (regularProjects.turnover || 0) + (contractorProjects.turnover || 0)
+      },
+      expenses: {
+        project: projectExpenses.total || 0,
+        company: companyExpenses2.total || 0,
+        total: (projectExpenses.total || 0) + (companyExpenses2.total || 0)
+      },
+      vat: {
+        collected_regular: regularProjects.vat_collected || 0,
+        collected_contractor: contractorProjects.vat_collected || 0,
+        collected_total: (regularProjects.vat_collected || 0) + (contractorProjects.vat_collected || 0),
+        paid: vatPaid.total || 0
+      },
+      pmPayments: pmPayments.total || 0,
+      profit: {
+        regular: regularProjects.profit || 0,
+        contractor: contractorProjects.profit || 0,
+        total: (regularProjects.profit || 0) + (contractorProjects.profit || 0)
+      },
+      projectCounts: {
+        regular: regularProjects.count || 0,
+        contractor: contractorProjects.count || 0,
+        total: (regularProjects.count || 0) + (contractorProjects.count || 0)
+      }
+    };
+  }
+
+  compExpStmt.step();
+  const companyExpenses = compExpStmt.getAsObject();
+  compExpStmt.free();
+
+  // Get VAT paid for this period
+  let vatPaid = { total: 0 };
+  if (period === 'quarter') {
+    const [year, quarter] = value.split('-');
+    const vatPaidStmt = db.prepare(`
+      SELECT SUM(vat_amount) as total
+      FROM vat_records
+      WHERE is_paid = 1 AND quarter = ? AND year = ?
+    `);
+    vatPaidStmt.bind([quarter, parseInt(year)]);
+    vatPaidStmt.step();
+    vatPaid = vatPaidStmt.getAsObject();
+    vatPaidStmt.free();
+  }
+
+  // Get PM payments for this period
+  const pmStmt = db.prepare(`
+    SELECT SUM(pm1_payment + pm2_payment) as total
+    FROM pm_payments pm
+    JOIN projects p ON pm.project_id = p.id
+    WHERE pm.is_paid = 1 AND ${dateFilter}
+  `);
+  pmStmt.bind(params);
+  pmStmt.step();
+  const pmPayments = pmStmt.getAsObject();
+  pmStmt.free();
+
+  return {
+    period,
+    value,
+    turnover: {
+      regular: regularProjects.turnover || 0,
+      contractor: contractorProjects.turnover || 0,
+      total: (regularProjects.turnover || 0) + (contractorProjects.turnover || 0)
+    },
+    expenses: {
+      project: projectExpenses.total || 0,
+      company: companyExpenses.total || 0,
+      total: (projectExpenses.total || 0) + (companyExpenses.total || 0)
+    },
+    vat: {
+      collected_regular: regularProjects.vat_collected || 0,
+      collected_contractor: contractorProjects.vat_collected || 0,
+      collected_total: (regularProjects.vat_collected || 0) + (contractorProjects.vat_collected || 0),
+      paid: vatPaid.total || 0
+    },
+    pmPayments: pmPayments.total || 0,
+    profit: {
+      regular: regularProjects.profit || 0,
+      contractor: contractorProjects.profit || 0,
+      total: (regularProjects.profit || 0) + (contractorProjects.profit || 0)
+    },
+    projectCounts: {
+      regular: regularProjects.count || 0,
+      contractor: contractorProjects.count || 0,
+      total: (regularProjects.count || 0) + (contractorProjects.count || 0)
+    }
+  };
+}
+
 // ========== UTILITY FUNCTIONS ==========
 
 function getQuarterFromDate(date) {
@@ -891,5 +1124,6 @@ module.exports = {
   getFinancialSummary,
   getSettings,
   saveSettings,
-  resetAllData
+  resetAllData,
+  getReportData
 };

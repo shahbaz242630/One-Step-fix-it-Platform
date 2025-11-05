@@ -17,6 +17,7 @@ function RegularProjects() {
     client_name: '',
     address: '',
     project_details: '',
+    start_date: new Date().toISOString().split('T')[0], // Default to today
     total_value_with_vat: '',
     advance_paid: '',
     num_project_managers: 0,
@@ -77,6 +78,7 @@ function RegularProjects() {
       client_name: project.client_name,
       address: project.address,
       project_details: project.project_details,
+      start_date: project.start_date || new Date().toISOString().split('T')[0],
       total_value_with_vat: project.total_value_with_vat,
       advance_paid: project.advance_paid,
       num_project_managers: project.num_project_managers,
@@ -124,6 +126,7 @@ function RegularProjects() {
       client_name: '',
       address: '',
       project_details: '',
+      start_date: new Date().toISOString().split('T')[0],
       total_value_with_vat: '',
       advance_paid: '',
       num_project_managers: 0,
@@ -293,6 +296,18 @@ function RegularProjects() {
                   onChange={(e) => setFormData({ ...formData, project_details: e.target.value })}
                   rows="3"
                 />
+              </div>
+              <div className="form-group">
+                <label>Start Date *</label>
+                <input
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                  required
+                />
+                <p style={{ fontSize: '13px', color: '#718096', marginTop: '5px' }}>
+                  The date when this project started
+                </p>
               </div>
               <div className="form-grid">
                 <div className="form-group">
