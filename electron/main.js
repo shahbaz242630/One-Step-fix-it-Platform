@@ -32,9 +32,9 @@ function createWindow() {
   });
 }
 
-app.on('ready', () => {
+app.on('ready', async () => {
   // Initialize database
-  db.initializeDatabase();
+  await db.initializeDatabase();
   createWindow();
 });
 
