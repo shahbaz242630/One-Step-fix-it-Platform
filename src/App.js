@@ -10,6 +10,7 @@ import ContractorProjects from './components/ContractorProjects';
 import VATTracking from './components/VATTracking';
 import PartnersTab from './components/PartnersTab';
 import FinancialSummary from './components/FinancialSummary';
+import Settings from './components/Settings';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -57,6 +58,11 @@ function App() {
                 📈 Financial Summary
               </Link>
             </li>
+            <li className={activeTab === 'settings' ? 'active' : ''}>
+              <Link to="/settings" onClick={() => setActiveTab('settings')}>
+                ⚙️ Settings
+              </Link>
+            </li>
           </ul>
         </nav>
 
@@ -69,6 +75,7 @@ function App() {
             <Route path="/vat" element={<VATTracking />} />
             <Route path="/partners" element={<PartnersTab />} />
             <Route path="/summary" element={<FinancialSummary />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
       </div>

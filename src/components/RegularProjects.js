@@ -9,6 +9,9 @@ function RegularProjects() {
   const [editingProject, setEditingProject] = useState(null);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completingProject, setCompletingProject] = useState(null);
+  const [numPMs, setNumPMs] = useState(0);
 
   const [formData, setFormData] = useState({
     client_name: '',
@@ -93,23 +96,22 @@ function RegularProjects() {
     }
   };
 
-  const handleCompleteProject = async (project) => {
-    const numPMs = prompt('How many project managers worked on this project? (0, 1, or 2)');
-    if (numPMs === null) return;
+  const handleCompleteProject = (project) => {
+    setCompletingProject(project);
+    setNumPMs(0);
+    setShowCompleteModal(true);
+  };
 
-    const num = parseInt(numPMs);
-    if (num < 0 || num > 2 || isNaN(num)) {
-      alert('Please enter 0, 1, or 2');
-      return;
-    }
-
+  const confirmCompleteProject = async () => {
     try {
-      await ipcRenderer.invoke('update-project', project.id, {
-        ...project,
+      await ipcRenderer.invoke('update-project', completingProject.id, {
+        ...completingProject,
         status: 'completed',
         completed_at: new Date().toISOString(),
-        num_project_managers: num
+        num_project_managers: numPMs
       });
+      setShowCompleteModal(false);
+      setCompletingProject(null);
       loadProjects();
       alert('Project completed! PM payments will appear in Partners tab if applicable.');
     } catch (error) {
@@ -364,6 +366,50 @@ function RegularProjects() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Project Modal */}
+      {showCompleteModal && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Complete Project</h2>
+              <button className="modal-close" onClick={() => { setShowCompleteModal(false); setCompletingProject(null); }}>
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: '20px 0' }}>
+              <p style={{ marginBottom: '20px', color: '#4a5568' }}>
+                How many project managers worked on this project?
+              </p>
+              <div className="form-group">
+                <label>Number of Project Managers</label>
+                <select
+                  value={numPMs}
+                  onChange={(e) => setNumPMs(parseInt(e.target.value))}
+                  style={{ width: '100%', padding: '10px', fontSize: '16px' }}
+                >
+                  <option value={0}>0 - No Project Managers (Company gets 100%)</option>
+                  <option value={1}>1 - Project Manager (50% to PM, 50% to Company)</option>
+                  <option value={2}>2 - Project Managers (25% each PM, 50% to Company)</option>
+                </select>
+              </div>
+              <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f7fafc', borderRadius: '6px' }}>
+                <p style={{ fontSize: '14px', color: '#718096', margin: 0 }}>
+                  <strong>Note:</strong> PM payments will be generated automatically and appear in the Partners tab.
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowCompleteModal(false); setCompletingProject(null); }}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-success" onClick={confirmCompleteProject}>
+                ✓ Complete Project
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -83,3 +83,7 @@ ipcMain.handle('update-vat-paid', (event, id, isPaid) => db.updateVATPaid(id, is
 // Dashboard Stats
 ipcMain.handle('get-dashboard-stats', () => db.getDashboardStats());
 ipcMain.handle('get-financial-summary', () => db.getFinancialSummary());
+
+// Settings
+ipcMain.handle('get-settings', () => db.getSettings());
+ipcMain.handle('save-settings', (event, settings) => db.saveSettings(settings));

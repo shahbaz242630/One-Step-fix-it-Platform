@@ -18,6 +18,9 @@ async function initializeDatabase() {
     db = new SQL.Database();
   }
 
+  // Enable foreign keys
+  db.run('PRAGMA foreign_keys = ON');
+
   // Create tables
   db.run(`
     CREATE TABLE IF NOT EXISTS projects (
@@ -114,6 +117,29 @@ async function initializeDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      starting_balance REAL DEFAULT 0,
+      initial_deposits REAL DEFAULT 0,
+      initial_vat REAL DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Insert default settings if not exists
+  const settingsStmt = db.prepare('SELECT COUNT(*) as count FROM settings');
+  settingsStmt.step();
+  const result = settingsStmt.getAsObject();
+  settingsStmt.free();
+
+  if (result.count === 0) {
+    const insertStmt = db.prepare('INSERT INTO settings (id, starting_balance, initial_deposits, initial_vat) VALUES (1, 0, 0, 0)');
+    insertStmt.step();
+    insertStmt.free();
+  }
 
   saveDatabase();
   console.log('Database initialized successfully at:', dbPath);
@@ -318,15 +344,29 @@ function updateProject(id, updates) {
 }
 
 function deleteProject(id) {
-  const stmt = db.prepare('DELETE FROM projects WHERE id = ?');
-  stmt.bind([id]);
-  stmt.step();
-  stmt.free();
+  // Delete project expenses first
+  const expStmt = db.prepare('DELETE FROM project_expenses WHERE project_id = ?');
+  expStmt.bind([id]);
+  expStmt.step();
+  expStmt.free();
 
+  // Delete PM payments
+  const pmStmt = db.prepare('DELETE FROM pm_payments WHERE project_id = ?');
+  pmStmt.bind([id]);
+  pmStmt.step();
+  pmStmt.free();
+
+  // Delete VAT records
   const vatStmt = db.prepare('DELETE FROM vat_records WHERE project_id = ? AND project_type = ?');
   vatStmt.bind([id, 'regular']);
   vatStmt.step();
   vatStmt.free();
+
+  // Delete the project itself
+  const stmt = db.prepare('DELETE FROM projects WHERE id = ?');
+  stmt.bind([id]);
+  stmt.step();
+  stmt.free();
 
   saveDatabase();
   return true;
@@ -551,15 +591,17 @@ function updateContractorProject(id, updates) {
 }
 
 function deleteContractorProject(id) {
-  const stmt = db.prepare('DELETE FROM contractor_projects WHERE id = ?');
-  stmt.bind([id]);
-  stmt.step();
-  stmt.free();
-
+  // Delete VAT records first
   const vatStmt = db.prepare('DELETE FROM vat_records WHERE project_id = ? AND project_type = ?');
   vatStmt.bind([id, 'contractor']);
   vatStmt.step();
   vatStmt.free();
+
+  // Delete the contractor project
+  const stmt = db.prepare('DELETE FROM contractor_projects WHERE id = ?');
+  stmt.bind([id]);
+  stmt.step();
+  stmt.free();
 
   saveDatabase();
   return true;
@@ -617,6 +659,12 @@ function updateVATPaid(id, isPaid) {
 // ========== DASHBOARD STATS ==========
 
 function getDashboardStats() {
+  // Get settings for initial values
+  const settings = getSettings();
+  const starting_balance = settings.starting_balance || 0;
+  const initial_deposits = settings.initial_deposits || 0;
+  const initial_vat = settings.initial_vat || 0;
+
   // Get all advances and payments
   const projStmt = db.prepare('SELECT SUM(advance_paid) as total FROM projects');
   projStmt.step();
@@ -628,7 +676,7 @@ function getDashboardStats() {
   const contractorPayments = contrStmt.getAsObject();
   contrStmt.free();
 
-  const totalDeposits = (projectPayments.total || 0) + (contractorPayments.total || 0);
+  const totalDeposits = (projectPayments.total || 0) + (contractorPayments.total || 0) + initial_deposits;
 
   // Get company expenses
   const compExpStmt = db.prepare('SELECT SUM(amount) as total FROM company_expenses');
@@ -667,8 +715,8 @@ function getDashboardStats() {
   const currentQuarterVAT = currentVATStmt.getAsObject();
   currentVATStmt.free();
 
-  const bankBalance = totalDeposits - totalExpenses - (pmPaymentsMade.total || 0) - (vatPaid.total || 0);
-  const vatOwed = currentQuarterVAT.total || 0;
+  const bankBalance = starting_balance + (projectPayments.total || 0) + (contractorPayments.total || 0) - totalExpenses - (pmPaymentsMade.total || 0) - (vatPaid.total || 0);
+  const vatOwed = (currentQuarterVAT.total || 0) + initial_vat;
   const ownerBalance = bankBalance - vatOwed - totalDeposits;
 
   return {
@@ -737,6 +785,34 @@ function getFinancialSummary() {
   };
 }
 
+// ========== SETTINGS ==========
+
+function getSettings() {
+  const stmt = db.prepare('SELECT * FROM settings WHERE id = 1');
+  stmt.step();
+  const settings = stmt.getAsObject();
+  stmt.free();
+  return settings;
+}
+
+function saveSettings(settings) {
+  const { starting_balance, initial_deposits, initial_vat } = settings;
+  const stmt = db.prepare(`
+    UPDATE settings SET
+      starting_balance = ?,
+      initial_deposits = ?,
+      initial_vat = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = 1
+  `);
+  stmt.bind([starting_balance, initial_deposits, initial_vat]);
+  stmt.step();
+  stmt.free();
+
+  saveDatabase();
+  return true;
+}
+
 // ========== UTILITY FUNCTIONS ==========
 
 function getQuarterFromDate(date) {
@@ -771,5 +847,7 @@ module.exports = {
   getVATRecords,
   updateVATPaid,
   getDashboardStats,
-  getFinancialSummary
+  getFinancialSummary,
+  getSettings,
+  saveSettings
 };
