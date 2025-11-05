@@ -1,0 +1,71 @@
+{
+  "name": "financial-management-platform",
+  "version": "1.0.0",
+  "description": "Financial Management Platform for Home Maintenance Business",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && npm run start:electron\"",
+    "start:react": "react-scripts start",
+    "start:electron": "electron .",
+    "build": "react-scripts build",
+    "build:electron": "npm run build && electron-builder",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "build": {
+    "appId": "com.financialmanagement.app",
+    "productName": "Financial Management Platform",
+    "files": [
+      "build/**/*",
+      "electron/**/*",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    }
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "better-sqlite3": "^9.2.0",
+    "date-fns": "^2.30.0",
+    "recharts": "^2.10.0",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.0",
+    "xlsx": "^0.18.5",
+    "lucide-react": "^0.294.0",
+    "electron-is-dev": "^2.0.0"
+  },
+  "devDependencies": {
+    "react-scripts": "5.0.1",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
