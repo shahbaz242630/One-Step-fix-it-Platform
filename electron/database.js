@@ -1064,12 +1064,19 @@ function getDashboardStats() {
   const projectPayments = projStmt.getAsObject();
   projStmt.free();
 
-  const contrStmt = db.prepare('SELECT SUM(advance_paid) as total FROM contractor_projects');
-  contrStmt.step();
-  const contractorPayments = contrStmt.getAsObject();
-  contrStmt.free();
+  // For contractor projects, use client_paid_total (actual cash received) instead of advance_paid
+  const contrClientStmt = db.prepare('SELECT SUM(client_paid_total) as total FROM contractor_projects');
+  contrClientStmt.step();
+  const contractorClientPayments = contrClientStmt.getAsObject();
+  contrClientStmt.free();
 
-  const totalDeposits = (projectPayments.total || 0) + (contractorPayments.total || 0) + initial_deposits;
+  // Get contractor payments (cash paid OUT to contractors)
+  const contrPaymentsStmt = db.prepare('SELECT SUM(contractor_paid_total) as total FROM contractor_projects');
+  contrPaymentsStmt.step();
+  const contractorPaymentsOut = contrPaymentsStmt.getAsObject();
+  contrPaymentsStmt.free();
+
+  const totalDeposits = (projectPayments.total || 0) + (contractorClientPayments.total || 0) + initial_deposits;
 
   // Get company expenses
   const compExpStmt = db.prepare('SELECT SUM(amount) as total FROM company_expenses');
@@ -1151,7 +1158,17 @@ function getDashboardStats() {
   }
   allQuartersStmt.free();
 
-  const bankBalance = starting_balance + (projectPayments.total || 0) + (contractorPayments.total || 0) - totalExpenses - (pmPaymentsMade.total || 0) - totalNetVATPaid;
+  // Bank balance = starting + cash IN - cash OUT
+  // Cash IN: project advances, contractor client payments
+  // Cash OUT: expenses, PM payments, NET VAT paid, contractor payments
+  const bankBalance = starting_balance
+    + (projectPayments.total || 0)
+    + (contractorClientPayments.total || 0)
+    - totalExpenses
+    - (pmPaymentsMade.total || 0)
+    - totalNetVATPaid
+    - (contractorPaymentsOut.total || 0); // Subtract money paid to contractors
+
   const vatOwed = totalNetVATOwed;
   const ownerBalance = bankBalance - vatOwed - totalDeposits;
 
