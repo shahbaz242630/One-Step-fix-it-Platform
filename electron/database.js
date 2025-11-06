@@ -159,6 +159,57 @@ async function initializeDatabase() {
     insertStmt.free();
   }
 
+  // ========== DATABASE MIGRATIONS ==========
+  // Add missing columns to existing tables (for users who created DB before these features were added)
+
+  try {
+    // Check if start_date column exists in projects table
+    const checkProjectsStmt = db.prepare("SELECT start_date FROM projects LIMIT 1");
+    checkProjectsStmt.step();
+    checkProjectsStmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding start_date column to projects table...');
+    db.run('ALTER TABLE projects ADD COLUMN start_date TEXT');
+    console.log('Added start_date to projects');
+  }
+
+  try {
+    // Check if duration_days column exists in projects table
+    const checkDurationStmt = db.prepare("SELECT duration_days FROM projects LIMIT 1");
+    checkDurationStmt.step();
+    checkDurationStmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding duration_days column to projects table...');
+    db.run('ALTER TABLE projects ADD COLUMN duration_days INTEGER DEFAULT 0');
+    console.log('Added duration_days to projects');
+  }
+
+  try {
+    // Check if start_date column exists in contractor_projects table
+    const checkContractorStmt = db.prepare("SELECT start_date FROM contractor_projects LIMIT 1");
+    checkContractorStmt.step();
+    checkContractorStmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding start_date column to contractor_projects table...');
+    db.run('ALTER TABLE contractor_projects ADD COLUMN start_date TEXT');
+    console.log('Added start_date to contractor_projects');
+  }
+
+  try {
+    // Check if duration_days column exists in contractor_projects table
+    const checkContractorDurationStmt = db.prepare("SELECT duration_days FROM contractor_projects LIMIT 1");
+    checkContractorDurationStmt.step();
+    checkContractorDurationStmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding duration_days column to contractor_projects table...');
+    db.run('ALTER TABLE contractor_projects ADD COLUMN duration_days INTEGER DEFAULT 0');
+    console.log('Added duration_days to contractor_projects');
+  }
+
   saveDatabase();
   console.log('Database initialized successfully at:', dbPath);
 }

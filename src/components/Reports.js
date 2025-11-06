@@ -100,14 +100,94 @@ function Reports() {
     }).format(amount);
   };
 
-  const exportToPDF = () => {
-    alert('PDF export feature - Coming soon! Will use jspdf library');
-    // TODO: Implement with jspdf
+  const exportToCSV = () => {
+    if (!reportData) return;
+
+    const periodLabel = periodType === 'month'
+      ? options.find(o => o.value === selectedValue)?.label
+      : selectedValue;
+
+    // Create CSV content
+    const csvRows = [];
+
+    // Header
+    csvRows.push(`Financial Report - ${periodLabel}`);
+    csvRows.push('Generated: ' + new Date().toLocaleDateString('en-AE'));
+    csvRows.push('');
+
+    // Summary
+    csvRows.push('SUMMARY');
+    csvRows.push('Description,Amount (AED)');
+    csvRows.push(`Total Turnover,${reportData.turnover.total.toFixed(2)}`);
+    csvRows.push(`Total Expenses,${reportData.expenses.total.toFixed(2)}`);
+    csvRows.push(`Company Profit,${reportData.profit.total.toFixed(2)}`);
+    csvRows.push(`VAT Collected,${reportData.vat.collected_total.toFixed(2)}`);
+    csvRows.push(`VAT Paid,${reportData.vat.paid.toFixed(2)}`);
+    csvRows.push('');
+
+    // Turnover Breakdown
+    csvRows.push('TURNOVER BREAKDOWN');
+    csvRows.push('Project Type,Count,Amount (AED)');
+    csvRows.push(`Regular Projects,${reportData.projectCounts.regular},${reportData.turnover.regular.toFixed(2)}`);
+    csvRows.push(`Contractor Projects,${reportData.projectCounts.contractor},${reportData.turnover.contractor.toFixed(2)}`);
+    csvRows.push(`TOTAL,${reportData.projectCounts.total},${reportData.turnover.total.toFixed(2)}`);
+    csvRows.push('');
+
+    // Expenses Breakdown
+    csvRows.push('EXPENSES BREAKDOWN');
+    csvRows.push('Expense Type,Amount (AED)');
+    csvRows.push(`Project Expenses,${reportData.expenses.project.toFixed(2)}`);
+    csvRows.push(`Company Expenses,${reportData.expenses.company.toFixed(2)}`);
+    csvRows.push(`TOTAL EXPENSES,${reportData.expenses.total.toFixed(2)}`);
+    csvRows.push('');
+
+    // VAT Summary
+    csvRows.push('VAT SUMMARY');
+    csvRows.push('Description,Amount (AED)');
+    csvRows.push(`VAT from Regular Projects,${reportData.vat.collected_regular.toFixed(2)}`);
+    csvRows.push(`VAT from Contractor Projects,${reportData.vat.collected_contractor.toFixed(2)}`);
+    csvRows.push(`Total VAT Collected,${reportData.vat.collected_total.toFixed(2)}`);
+    csvRows.push(`VAT Paid to Government,${reportData.vat.paid.toFixed(2)}`);
+    csvRows.push('');
+
+    // Profit & PM Payments
+    csvRows.push('PROFIT & PM PAYMENTS');
+    csvRows.push('Description,Amount (AED)');
+    csvRows.push(`Regular Projects Profit,${reportData.profit.regular.toFixed(2)}`);
+    csvRows.push(`Contractor Projects Profit,${reportData.profit.contractor.toFixed(2)}`);
+    csvRows.push(`Total Company Profit,${reportData.profit.total.toFixed(2)}`);
+    csvRows.push(`PM Payments (Paid),${reportData.pmPayments.toFixed(2)}`);
+    csvRows.push('');
+
+    // Current Account Status
+    if (dashboardStats) {
+      csvRows.push('CURRENT ACCOUNT STATUS');
+      csvRows.push('Account,Balance (AED)');
+      csvRows.push(`Total Bank Balance,${dashboardStats.bankBalance.toFixed(2)}`);
+      csvRows.push(`Client Deposits,-${dashboardStats.clientDeposits.toFixed(2)}`);
+      csvRows.push(`VAT Owed,-${dashboardStats.vatOwed.toFixed(2)}`);
+      csvRows.push(`Owner's Available Balance,${dashboardStats.ownerBalance.toFixed(2)}`);
+    }
+
+    // Create CSV string
+    const csvContent = csvRows.join('\n');
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Financial_Report_${selectedValue.replace(/\s+/g, '_')}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const exportToExcel = () => {
-    alert('Excel export feature - Coming soon! Will use xlsx library');
-    // TODO: Implement with xlsx
+  const exportToPDF = () => {
+    alert('PDF export - Coming soon! We recommend using Print to PDF from your browser for now.');
   };
 
   let options = [];
@@ -171,11 +251,11 @@ function Reports() {
       {reportData && (
         <>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <button className="btn btn-success" onClick={exportToExcel}>
-              📊 Export to Excel
+            <button className="btn btn-success" onClick={exportToCSV}>
+              📊 Export to CSV
             </button>
             <button className="btn btn-secondary" onClick={exportToPDF}>
-              📄 Export to PDF
+              📄 Print Report (PDF)
             </button>
           </div>
 

@@ -46,17 +46,29 @@ function RegularProjects() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate required fields
+    if (!formData.client_name || !formData.total_value_with_vat) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
     try {
+      console.log('Submitting project data:', formData);
+
       if (editingProject) {
         await ipcRenderer.invoke('update-project', editingProject.id, formData);
       } else {
         await ipcRenderer.invoke('add-project', formData);
       }
+
       setShowModal(false);
       resetForm();
       loadProjects();
+      alert('Project added successfully!');
     } catch (error) {
       console.error('Error saving project:', error);
+      alert('Error saving project: ' + error.message);
     }
   };
 

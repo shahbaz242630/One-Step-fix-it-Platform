@@ -37,17 +37,29 @@ function ContractorProjects() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate required fields
+    if (!formData.client_name || !formData.total_charged_with_vat || !formData.contractor_name || !formData.contractor_price) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
     try {
+      console.log('Submitting contractor project data:', formData);
+
       if (editingProject) {
         await ipcRenderer.invoke('update-contractor-project', editingProject.id, formData);
       } else {
         await ipcRenderer.invoke('add-contractor-project', formData);
       }
+
       setShowModal(false);
       resetForm();
       loadProjects();
+      alert('Contractor project added successfully!');
     } catch (error) {
       console.error('Error saving contractor project:', error);
+      alert('Error saving contractor project: ' + error.message);
     }
   };
 

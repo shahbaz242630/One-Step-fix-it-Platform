@@ -255,7 +255,16 @@ function VATTracking() {
       {quarterlySummary.length === 0 && (
         <div className="empty-state">
           <h3>No VAT Records Yet</h3>
-          <p>VAT records will appear here when you add projects and receive payments</p>
+          <p>VAT records will automatically appear here when you:</p>
+          <ul style={{ textAlign: 'left', maxWidth: '500px', margin: '20px auto', lineHeight: '1.8' }}>
+            <li>Add a Regular Project or Contractor Project</li>
+            <li>Enter an "Advance Paid" amount (client deposit)</li>
+            <li>Save the project</li>
+          </ul>
+          <p style={{ marginTop: '20px', color: '#4a5568', fontSize: '14px' }}>
+            💡 The system will automatically calculate the VAT from the payment amount and organize it by quarter.
+            You can then add Input VAT (VAT you paid on purchases) to calculate the net amount payable to the government.
+          </p>
         </div>
       )}
 
