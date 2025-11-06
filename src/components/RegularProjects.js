@@ -41,8 +41,12 @@ function RegularProjects() {
   const loadSettings = async () => {
     try {
       const data = await ipcRenderer.invoke('get-settings');
+      console.log('Loaded PM settings in RegularProjects:', data); // Debug log
       if (data) {
-        setSettings(data);
+        setSettings({
+          pm1_name: data.pm1_name || 'Project Manager 1',
+          pm2_name: data.pm2_name || 'Project Manager 2'
+        });
       }
     } catch (error) {
       console.error('Error loading settings:', error);
