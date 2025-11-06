@@ -434,8 +434,26 @@ function updateProject(id, updates) {
 
   // Create PM payment record if project completed
   if (status === 'completed' && project.status !== 'completed' && num_project_managers > 0) {
-    const pm1_payment = num_project_managers === 1 ? company_profit * 0.5 : company_profit * 0.25;
-    const pm2_payment = num_project_managers === 2 ? company_profit * 0.25 : 0;
+    let pm1_payment = 0;
+    let pm2_payment = 0;
+
+    // Handle PM selection: 'pm1', 'pm2', or 'both'
+    const pmSelection = updates.pm_selection || 'pm1'; // Default to pm1 for backwards compatibility
+
+    if (num_project_managers === 1) {
+      // Single PM gets 50%
+      if (pmSelection === 'pm1') {
+        pm1_payment = company_profit * 0.5;
+        pm2_payment = 0;
+      } else if (pmSelection === 'pm2') {
+        pm1_payment = 0;
+        pm2_payment = company_profit * 0.5;
+      }
+    } else if (num_project_managers === 2) {
+      // Both PMs get 25% each
+      pm1_payment = company_profit * 0.25;
+      pm2_payment = company_profit * 0.25;
+    }
 
     const pmStmt = db.prepare(`
       INSERT INTO pm_payments (project_id, client_name, project_profit, num_pms, pm1_payment, pm2_payment)

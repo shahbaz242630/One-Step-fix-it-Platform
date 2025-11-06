@@ -12,6 +12,7 @@ function RegularProjects() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completingProject, setCompletingProject] = useState(null);
   const [numPMs, setNumPMs] = useState(0);
+  const [pmSelection, setPmSelection] = useState('none'); // 'none', 'pm1', 'pm2', 'both'
   const [settings, setSettings] = useState({
     pm1_name: 'Project Manager 1',
     pm2_name: 'Project Manager 2'
@@ -132,20 +133,27 @@ function RegularProjects() {
 
   const handleCompleteProject = (project) => {
     setCompletingProject(project);
-    setNumPMs(0);
+    setPmSelection('none');
     setShowCompleteModal(true);
   };
 
   const confirmCompleteProject = async () => {
     try {
+      // Map pmSelection to num_project_managers
+      let numPMs = 0;
+      if (pmSelection === 'pm1' || pmSelection === 'pm2') numPMs = 1;
+      else if (pmSelection === 'both') numPMs = 2;
+
       await ipcRenderer.invoke('update-project', completingProject.id, {
         ...completingProject,
         status: 'completed',
         completed_at: new Date().toISOString(),
-        num_project_managers: numPMs
+        num_project_managers: numPMs,
+        pm_selection: pmSelection // Pass which PM(s) were selected
       });
       setShowCompleteModal(false);
       setCompletingProject(null);
+      setPmSelection('none');
       loadProjects();
       alert('Project completed! PM payments will appear in Partners tab if applicable.');
     } catch (error) {
@@ -432,15 +440,16 @@ function RegularProjects() {
                 How many project managers worked on this project?
               </p>
               <div className="form-group">
-                <label>Number of Project Managers</label>
+                <label>Select Project Manager(s)</label>
                 <select
-                  value={numPMs}
-                  onChange={(e) => setNumPMs(parseInt(e.target.value))}
+                  value={pmSelection}
+                  onChange={(e) => setPmSelection(e.target.value)}
                   style={{ width: '100%', padding: '10px', fontSize: '16px' }}
                 >
-                  <option value={0}>0 - No Project Managers (Company gets 100%)</option>
-                  <option value={1}>1 - {settings.pm1_name || 'Project Manager 1'} (50% to PM, 50% to Company)</option>
-                  <option value={2}>2 - {settings.pm1_name || 'PM1'} & {settings.pm2_name || 'PM2'} (25% each, 50% to Company)</option>
+                  <option value="none">0 - No Project Managers (Company gets 100%)</option>
+                  <option value="pm1">1 - {settings.pm1_name || 'Project Manager 1'} only (50% to PM, 50% to Company)</option>
+                  <option value="pm2">1 - {settings.pm2_name || 'Project Manager 2'} only (50% to PM, 50% to Company)</option>
+                  <option value="both">2 - {settings.pm1_name || 'PM1'} & {settings.pm2_name || 'PM2'} (25% each, 50% to Company)</option>
                 </select>
               </div>
               <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f7fafc', borderRadius: '6px' }}>
