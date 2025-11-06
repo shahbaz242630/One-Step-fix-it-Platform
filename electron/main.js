@@ -72,6 +72,12 @@ ipcMain.handle('add-contractor-project', (event, project) => db.addContractorPro
 ipcMain.handle('update-contractor-project', (event, id, project) => db.updateContractorProject(id, project));
 ipcMain.handle('delete-contractor-project', (event, id) => db.deleteContractorProject(id));
 
+// Contractor Project Payment Tracking
+ipcMain.handle('add-client-payment', (event, projectId, amount, description) => db.addClientPayment(projectId, amount, description));
+ipcMain.handle('add-contractor-payment', (event, projectId, amount, description) => db.addContractorPayment(projectId, amount, description));
+ipcMain.handle('get-client-payments', (event, projectId) => db.getClientPayments(projectId));
+ipcMain.handle('get-contractor-payments', (event, projectId) => db.getContractorPayments(projectId));
+
 // PM Payments
 ipcMain.handle('get-all-pm-payments', () => db.getAllPMPayments());
 ipcMain.handle('update-pm-payment', (event, id, isPaid) => db.updatePMPayment(id, isPaid));

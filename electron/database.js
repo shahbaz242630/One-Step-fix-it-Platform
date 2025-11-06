@@ -137,6 +137,30 @@ async function initializeDatabase() {
   `);
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS client_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contractor_project_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      description TEXT,
+      payment_date TEXT DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (contractor_project_id) REFERENCES contractor_projects(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS contractor_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contractor_project_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      description TEXT,
+      payment_date TEXT DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (contractor_project_id) REFERENCES contractor_projects(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       starting_balance REAL DEFAULT 0,
@@ -234,6 +258,30 @@ async function initializeDatabase() {
     console.log('Adding pm2_name column to settings table...');
     db.run('ALTER TABLE settings ADD COLUMN pm2_name TEXT DEFAULT "Project Manager 2"');
     console.log('Added pm2_name to settings');
+  }
+
+  try {
+    // Check if client_paid_total column exists in contractor_projects table
+    const checkClientPaidStmt = db.prepare("SELECT client_paid_total FROM contractor_projects LIMIT 1");
+    checkClientPaidStmt.step();
+    checkClientPaidStmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding client_paid_total column to contractor_projects table...');
+    db.run('ALTER TABLE contractor_projects ADD COLUMN client_paid_total REAL DEFAULT 0');
+    console.log('Added client_paid_total to contractor_projects');
+  }
+
+  try {
+    // Check if contractor_paid_total column exists in contractor_projects table
+    const checkContractorPaidStmt = db.prepare("SELECT contractor_paid_total FROM contractor_projects LIMIT 1");
+    checkContractorPaidStmt.step();
+    checkContractorPaidStmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding contractor_paid_total column to contractor_projects table...');
+    db.run('ALTER TABLE contractor_projects ADD COLUMN contractor_paid_total REAL DEFAULT 0');
+    console.log('Added contractor_paid_total to contractor_projects');
   }
 
   saveDatabase();
@@ -742,6 +790,91 @@ function deleteContractorProject(id) {
 
   saveDatabase();
   return true;
+}
+
+// ========== CONTRACTOR PROJECT PAYMENT TRACKING ==========
+
+function addClientPayment(projectId, amount, description) {
+  const stmt = db.prepare(`
+    INSERT INTO client_payments (contractor_project_id, amount, description, payment_date)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.bind([projectId, amount, description || '', new Date().toISOString()]);
+  stmt.step();
+  stmt.free();
+
+  // Update contractor project total
+  const updateStmt = db.prepare('UPDATE contractor_projects SET client_paid_total = client_paid_total + ? WHERE id = ?');
+  updateStmt.bind([amount, projectId]);
+  updateStmt.step();
+  updateStmt.free();
+
+  // Create VAT record for this payment
+  const vatAmount = amount * (5 / 105);
+  const { quarter, year } = getQuarterFromDate(new Date());
+
+  // Get project info
+  const projectStmt = db.prepare('SELECT client_name FROM contractor_projects WHERE id = ?');
+  projectStmt.bind([projectId]);
+  projectStmt.step();
+  const project = projectStmt.getAsObject();
+  projectStmt.free();
+
+  const vatStmt = db.prepare(`
+    INSERT INTO vat_records (project_id, project_type, client_name, payment_amount, vat_amount, quarter, year)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  vatStmt.bind([projectId, 'contractor', project.client_name, amount, vatAmount, quarter, year]);
+  vatStmt.step();
+  vatStmt.free();
+
+  saveDatabase();
+  return true;
+}
+
+function addContractorPayment(projectId, amount, description) {
+  const stmt = db.prepare(`
+    INSERT INTO contractor_payments (contractor_project_id, amount, description, payment_date)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.bind([projectId, amount, description || '', new Date().toISOString()]);
+  stmt.step();
+  stmt.free();
+
+  // Update contractor project total
+  const updateStmt = db.prepare('UPDATE contractor_projects SET contractor_paid_total = contractor_paid_total + ? WHERE id = ?');
+  updateStmt.bind([amount, projectId]);
+  updateStmt.step();
+  updateStmt.free();
+
+  saveDatabase();
+  return true;
+}
+
+function getClientPayments(projectId) {
+  const stmt = db.prepare('SELECT * FROM client_payments WHERE contractor_project_id = ? ORDER BY payment_date DESC');
+  stmt.bind([projectId]);
+
+  const payments = [];
+  while (stmt.step()) {
+    payments.push(stmt.getAsObject());
+  }
+  stmt.free();
+
+  return payments;
+}
+
+function getContractorPayments(projectId) {
+  const stmt = db.prepare('SELECT * FROM contractor_payments WHERE contractor_project_id = ? ORDER BY payment_date DESC');
+  stmt.bind([projectId]);
+
+  const payments = [];
+  while (stmt.step()) {
+    payments.push(stmt.getAsObject());
+  }
+  stmt.free();
+
+  return payments;
 }
 
 // ========== PM PAYMENTS ==========
@@ -1393,6 +1526,10 @@ module.exports = {
   addContractorProject,
   updateContractorProject,
   deleteContractorProject,
+  addClientPayment,
+  addContractorPayment,
+  getClientPayments,
+  getContractorPayments,
   getAllPMPayments,
   updatePMPayment,
   getVATRecords,
