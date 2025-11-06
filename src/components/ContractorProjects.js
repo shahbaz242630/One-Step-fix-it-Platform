@@ -45,8 +45,6 @@ function ContractorProjects() {
     }
 
     try {
-      console.log('Submitting contractor project data:', formData);
-
       if (editingProject) {
         await ipcRenderer.invoke('update-contractor-project', editingProject.id, formData);
       } else {

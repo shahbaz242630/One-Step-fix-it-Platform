@@ -18,7 +18,6 @@ function PartnersTab() {
   const loadSettings = async () => {
     try {
       const data = await ipcRenderer.invoke('get-settings');
-      console.log('Loaded PM settings:', data); // Debug log
       if (data) {
         setSettings({
           pm1_name: data.pm1_name || 'Project Manager 1',

@@ -42,7 +42,6 @@ function RegularProjects() {
   const loadSettings = async () => {
     try {
       const data = await ipcRenderer.invoke('get-settings');
-      console.log('Loaded PM settings in RegularProjects:', data); // Debug log
       if (data) {
         setSettings({
           pm1_name: data.pm1_name || 'Project Manager 1',
@@ -75,8 +74,6 @@ function RegularProjects() {
     }
 
     try {
-      console.log('Submitting project data:', formData);
-
       if (editingProject) {
         await ipcRenderer.invoke('update-project', editingProject.id, formData);
       } else {
