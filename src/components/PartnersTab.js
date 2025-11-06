@@ -5,10 +5,26 @@ const { ipcRenderer } = window.require('electron');
 function PartnersTab() {
   const [pmPayments, setPmPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState({
+    pm1_name: 'Project Manager 1',
+    pm2_name: 'Project Manager 2'
+  });
 
   useEffect(() => {
     loadPMPayments();
+    loadSettings();
   }, []);
+
+  const loadSettings = async () => {
+    try {
+      const data = await ipcRenderer.invoke('get-settings');
+      if (data) {
+        setSettings(data);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
 
   const loadPMPayments = async () => {
     try {
@@ -93,8 +109,8 @@ function PartnersTab() {
               <th>Client Name</th>
               <th>Project Profit</th>
               <th># of PMs</th>
-              <th>PM1 Payment (50% or 25%)</th>
-              <th>PM2 Payment (25%)</th>
+              <th>{settings.pm1_name || 'PM1'} Payment (50% or 25%)</th>
+              <th>{settings.pm2_name || 'PM2'} Payment (25%)</th>
               <th>Total Due</th>
               <th>Status</th>
               <th>Date Paid</th>

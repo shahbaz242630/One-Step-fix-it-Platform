@@ -142,6 +142,8 @@ async function initializeDatabase() {
       starting_balance REAL DEFAULT 0,
       initial_deposits REAL DEFAULT 0,
       initial_vat REAL DEFAULT 0,
+      pm1_name TEXT DEFAULT 'Project Manager 1',
+      pm2_name TEXT DEFAULT 'Project Manager 2',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
@@ -154,7 +156,7 @@ async function initializeDatabase() {
   settingsStmt.free();
 
   if (result.count === 0) {
-    const insertStmt = db.prepare('INSERT INTO settings (id, starting_balance, initial_deposits, initial_vat) VALUES (1, 0, 0, 0)');
+    const insertStmt = db.prepare('INSERT INTO settings (id, starting_balance, initial_deposits, initial_vat, pm1_name, pm2_name) VALUES (1, 0, 0, 0, "Project Manager 1", "Project Manager 2")');
     insertStmt.step();
     insertStmt.free();
   }
@@ -208,6 +210,30 @@ async function initializeDatabase() {
     console.log('Adding duration_days column to contractor_projects table...');
     db.run('ALTER TABLE contractor_projects ADD COLUMN duration_days INTEGER DEFAULT 0');
     console.log('Added duration_days to contractor_projects');
+  }
+
+  try {
+    // Check if pm1_name column exists in settings table
+    const checkPM1Stmt = db.prepare("SELECT pm1_name FROM settings LIMIT 1");
+    checkPM1Stmt.step();
+    checkPM1Stmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding pm1_name column to settings table...');
+    db.run('ALTER TABLE settings ADD COLUMN pm1_name TEXT DEFAULT "Project Manager 1"');
+    console.log('Added pm1_name to settings');
+  }
+
+  try {
+    // Check if pm2_name column exists in settings table
+    const checkPM2Stmt = db.prepare("SELECT pm2_name FROM settings LIMIT 1");
+    checkPM2Stmt.step();
+    checkPM2Stmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding pm2_name column to settings table...');
+    db.run('ALTER TABLE settings ADD COLUMN pm2_name TEXT DEFAULT "Project Manager 2"');
+    console.log('Added pm2_name to settings');
   }
 
   saveDatabase();
@@ -1055,16 +1081,18 @@ function getSettings() {
 }
 
 function saveSettings(settings) {
-  const { starting_balance, initial_deposits, initial_vat } = settings;
+  const { starting_balance, initial_deposits, initial_vat, pm1_name, pm2_name } = settings;
   const stmt = db.prepare(`
     UPDATE settings SET
       starting_balance = ?,
       initial_deposits = ?,
       initial_vat = ?,
+      pm1_name = ?,
+      pm2_name = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = 1
   `);
-  stmt.bind([starting_balance, initial_deposits, initial_vat]);
+  stmt.bind([starting_balance, initial_deposits, initial_vat, pm1_name || 'Project Manager 1', pm2_name || 'Project Manager 2']);
   stmt.step();
   stmt.free();
 

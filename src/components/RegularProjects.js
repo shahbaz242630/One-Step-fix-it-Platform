@@ -12,6 +12,10 @@ function RegularProjects() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completingProject, setCompletingProject] = useState(null);
   const [numPMs, setNumPMs] = useState(0);
+  const [settings, setSettings] = useState({
+    pm1_name: 'Project Manager 1',
+    pm2_name: 'Project Manager 2'
+  });
 
   const [formData, setFormData] = useState({
     client_name: '',
@@ -31,7 +35,19 @@ function RegularProjects() {
 
   useEffect(() => {
     loadProjects();
+    loadSettings();
   }, []);
+
+  const loadSettings = async () => {
+    try {
+      const data = await ipcRenderer.invoke('get-settings');
+      if (data) {
+        setSettings(data);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
 
   const loadProjects = async () => {
     try {
@@ -419,8 +435,8 @@ function RegularProjects() {
                   style={{ width: '100%', padding: '10px', fontSize: '16px' }}
                 >
                   <option value={0}>0 - No Project Managers (Company gets 100%)</option>
-                  <option value={1}>1 - Project Manager (50% to PM, 50% to Company)</option>
-                  <option value={2}>2 - Project Managers (25% each PM, 50% to Company)</option>
+                  <option value={1}>1 - {settings.pm1_name || 'Project Manager 1'} (50% to PM, 50% to Company)</option>
+                  <option value={2}>2 - {settings.pm1_name || 'PM1'} & {settings.pm2_name || 'PM2'} (25% each, 50% to Company)</option>
                 </select>
               </div>
               <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f7fafc', borderRadius: '6px' }}>

@@ -6,7 +6,9 @@ function Settings() {
   const [settings, setSettings] = useState({
     starting_balance: 0,
     initial_deposits: 0,
-    initial_vat: 0
+    initial_vat: 0,
+    pm1_name: 'Project Manager 1',
+    pm2_name: 'Project Manager 2'
   });
   const [isSaved, setIsSaved] = useState(false);
 
@@ -60,7 +62,9 @@ function Settings() {
       setSettings({
         starting_balance: 0,
         initial_deposits: 0,
-        initial_vat: 0
+        initial_vat: 0,
+        pm1_name: 'Project Manager 1',
+        pm2_name: 'Project Manager 2'
       });
       alert('✓ All data has been reset! You can start fresh now.');
       window.location.reload(); // Reload the app to refresh all pages
@@ -146,6 +150,52 @@ function Settings() {
             </p>
             <p style={{ fontSize: '13px', color: '#166534', marginTop: '8px', marginBottom: 0 }}>
               = Starting Balance ({formatCurrency(settings.starting_balance)}) - Deposits ({formatCurrency(settings.initial_deposits)}) - VAT ({formatCurrency(settings.initial_vat)})
+            </p>
+          </div>
+
+          <div style={{ marginTop: '30px', textAlign: 'center' }}>
+            <button className="btn btn-primary" onClick={handleSave} style={{ padding: '12px 40px', fontSize: '16px' }}>
+              {isSaved ? '✓ Saved!' : '💾 Save Settings'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Project Manager Names */}
+      <div className="table-container" style={{ maxWidth: '700px', marginTop: '30px' }}>
+        <div className="table-header">
+          <h2>Project Manager Names</h2>
+        </div>
+        <div style={{ padding: '30px' }}>
+          <p style={{ color: '#718096', marginBottom: '30px', lineHeight: '1.6' }}>
+            Set the names of your project managers here. These names will appear in the Partners (PM Payments) section for easy identification.
+          </p>
+
+          <div className="form-group">
+            <label>Project Manager 1 Name</label>
+            <input
+              type="text"
+              value={settings.pm1_name || ''}
+              onChange={(e) => setSettings({ ...settings, pm1_name: e.target.value })}
+              placeholder="e.g., Shani Bhai"
+              style={{ fontSize: '16px' }}
+            />
+            <p style={{ fontSize: '13px', color: '#718096', marginTop: '5px' }}>
+              This name will show when 1 PM is assigned to a project (gets 50% of profit)
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label>Project Manager 2 Name</label>
+            <input
+              type="text"
+              value={settings.pm2_name || ''}
+              onChange={(e) => setSettings({ ...settings, pm2_name: e.target.value })}
+              placeholder="e.g., Ali Bhai"
+              style={{ fontSize: '16px' }}
+            />
+            <p style={{ fontSize: '13px', color: '#718096', marginTop: '5px' }}>
+              This name will show when 2 PMs are assigned to a project (each gets 25% of profit)
             </p>
           </div>
 
