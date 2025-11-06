@@ -8,6 +8,13 @@ function ContractorProjects() {
   const [showModal, setShowModal] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
 
+  // Payment tracking states
+  const [showClientPaymentModal, setShowClientPaymentModal] = useState(false);
+  const [showContractorPaymentModal, setShowContractorPaymentModal] = useState(false);
+  const [selectedProjectForPayment, setSelectedProjectForPayment] = useState(null);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completingProject, setCompletingProject] = useState(null);
+
   const [formData, setFormData] = useState({
     client_name: '',
     address: '',
@@ -18,6 +25,16 @@ function ContractorProjects() {
     contractor_price: '',
     advance_paid: '',
     status: 'active'
+  });
+
+  const [clientPaymentData, setClientPaymentData] = useState({
+    amount: '',
+    description: ''
+  });
+
+  const [contractorPaymentData, setContractorPaymentData] = useState({
+    amount: '',
+    description: ''
   });
 
   useEffect(() => {
@@ -88,18 +105,83 @@ function ContractorProjects() {
     }
   };
 
-  const handleCompleteProject = async (project) => {
-    if (window.confirm('Mark this project as completed?')) {
-      try {
-        await ipcRenderer.invoke('update-contractor-project', project.id, {
-          ...project,
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        });
-        loadProjects();
-      } catch (error) {
-        console.error('Error completing project:', error);
-      }
+  const handleOpenClientPayment = (project) => {
+    setSelectedProjectForPayment(project);
+    setClientPaymentData({ amount: '', description: '' });
+    setShowClientPaymentModal(true);
+  };
+
+  const handleOpenContractorPayment = (project) => {
+    setSelectedProjectForPayment(project);
+    setContractorPaymentData({ amount: '', description: '' });
+    setShowContractorPaymentModal(true);
+  };
+
+  const handleAddClientPayment = async (e) => {
+    e.preventDefault();
+    try {
+      await ipcRenderer.invoke('add-client-payment', selectedProjectForPayment.id, parseFloat(clientPaymentData.amount), clientPaymentData.description);
+      setShowClientPaymentModal(false);
+      setClientPaymentData({ amount: '', description: '' });
+      loadProjects();
+      alert('Client payment recorded successfully!');
+    } catch (error) {
+      console.error('Error adding client payment:', error);
+      alert('Error recording payment');
+    }
+  };
+
+  const handleAddContractorPayment = async (e) => {
+    e.preventDefault();
+    try {
+      await ipcRenderer.invoke('add-contractor-payment', selectedProjectForPayment.id, parseFloat(contractorPaymentData.amount), contractorPaymentData.description);
+      setShowContractorPaymentModal(false);
+      setContractorPaymentData({ amount: '', description: '' });
+      loadProjects();
+      alert('Contractor payment recorded successfully!');
+    } catch (error) {
+      console.error('Error adding contractor payment:', error);
+      alert('Error recording payment');
+    }
+  };
+
+  const handleCompleteProject = (project) => {
+    setCompletingProject(project);
+    setShowCompleteModal(true);
+  };
+
+  const confirmCompleteProject = async () => {
+    const project = completingProject;
+
+    // Calculate balances
+    const clientBalance = project.total_charged_with_vat - (project.client_paid_total || 0);
+    const contractorBalance = project.contractor_price - (project.contractor_paid_total || 0);
+
+    // Check if all payments settled
+    if (clientBalance > 0.01) {
+      alert(`Cannot complete project: Client still owes ${formatCurrency(clientBalance)} AED`);
+      return;
+    }
+
+    if (contractorBalance > 0.01) {
+      alert(`Cannot complete project: Contractor still owed ${formatCurrency(contractorBalance)} AED`);
+      return;
+    }
+
+    // All checks passed, complete the project
+    try {
+      await ipcRenderer.invoke('update-contractor-project', project.id, {
+        ...project,
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      });
+      setShowCompleteModal(false);
+      setCompletingProject(null);
+      loadProjects();
+      alert('Project completed successfully!');
+    } catch (error) {
+      console.error('Error completing project:', error);
+      alert('Error completing project');
     }
   };
 
@@ -148,82 +230,110 @@ function ContractorProjects() {
             <thead>
               <tr>
                 <th>Client Name</th>
-                <th>Address</th>
-                <th>Project Details</th>
-                <th>Total Charged (with VAT)</th>
-                <th>VAT (5%)</th>
-                <th>Value (excl VAT)</th>
-                <th>Contractor Name</th>
+                <th>Total Charged (VAT incl)</th>
+                <th>Client Paid</th>
+                <th>Client Balance</th>
                 <th>Contractor Price</th>
-                <th>Advance Paid</th>
-                <th>Balance Due</th>
+                <th>Contractor Paid</th>
+                <th>Contractor Balance</th>
                 <th>Company Profit</th>
                 <th>Status</th>
-                <th>VAT Collected</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {projects.length === 0 ? (
                 <tr>
-                  <td colSpan="14" style={{ textAlign: 'center', padding: '40px', color: '#718096' }}>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: '40px', color: '#718096' }}>
                     No contractor projects yet. Add your first one!
                   </td>
                 </tr>
               ) : (
-                projects.map((project) => (
-                  <tr key={project.id}>
-                    <td><strong>{project.client_name}</strong></td>
-                    <td>{project.address}</td>
-                    <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {project.project_details}
-                    </td>
-                    <td>{formatCurrency(project.total_charged_with_vat)}</td>
-                    <td style={{ color: '#f6ad55' }}>{formatCurrency(project.vat_amount)}</td>
-                    <td>{formatCurrency(project.value_excl_vat)}</td>
-                    <td><strong>{project.contractor_name}</strong></td>
-                    <td style={{ color: '#fc8181' }}>{formatCurrency(project.contractor_price)}</td>
-                    <td style={{ color: '#4299e1' }}>{formatCurrency(project.advance_paid)}</td>
-                    <td>{formatCurrency(project.balance_due)}</td>
-                    <td style={{ color: project.company_profit >= 0 ? '#48bb78' : '#fc8181', fontWeight: 'bold' }}>
-                      {formatCurrency(project.company_profit)}
-                    </td>
-                    <td>
-                      <span className={`badge ${project.status === 'completed' ? 'badge-success' : 'badge-info'}`}>
-                        {project.status}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${project.vat_collected ? 'badge-success' : 'badge-warning'}`}>
-                        {project.vat_collected ? 'Yes' : 'Pending'}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                        <button
-                          className="btn btn-secondary btn-small"
-                          onClick={() => handleEdit(project)}
-                        >
-                          Edit
-                        </button>
-                        {project.status === 'active' && (
+                projects.map((project) => {
+                  const clientPaid = project.client_paid_total || 0;
+                  const contractorPaid = project.contractor_paid_total || 0;
+                  const clientBalance = project.total_charged_with_vat - clientPaid;
+                  const contractorBalance = project.contractor_price - contractorPaid;
+
+                  return (
+                    <tr key={project.id}>
+                      <td>
+                        <strong>{project.client_name}</strong>
+                        <div style={{ fontSize: '12px', color: '#718096' }}>{project.contractor_name}</div>
+                      </td>
+                      <td>{formatCurrency(project.total_charged_with_vat)}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ color: '#4299e1', fontWeight: 'bold' }}>{formatCurrency(clientPaid)}</span>
+                          {project.status === 'active' && (
+                            <button
+                              className="btn btn-success"
+                              style={{ padding: '2px 8px', fontSize: '16px' }}
+                              onClick={() => handleOpenClientPayment(project)}
+                              title="Add client payment"
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ color: clientBalance > 0 ? '#fc8181' : '#48bb78', fontWeight: 'bold' }}>
+                        {formatCurrency(clientBalance)}
+                      </td>
+                      <td style={{ color: '#fc8181' }}>{formatCurrency(project.contractor_price)}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ color: '#f6ad55', fontWeight: 'bold' }}>{formatCurrency(contractorPaid)}</span>
+                          {project.status === 'active' && (
+                            <button
+                              className="btn btn-warning"
+                              style={{ padding: '2px 8px', fontSize: '16px' }}
+                              onClick={() => handleOpenContractorPayment(project)}
+                              title="Add contractor payment"
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ color: contractorBalance > 0 ? '#fc8181' : '#48bb78', fontWeight: 'bold' }}>
+                        {formatCurrency(contractorBalance)}
+                      </td>
+                      <td style={{ color: project.company_profit >= 0 ? '#48bb78' : '#fc8181', fontWeight: 'bold' }}>
+                        {formatCurrency(project.company_profit)}
+                      </td>
+                      <td>
+                        <span className={`badge ${project.status === 'completed' ? 'badge-success' : 'badge-info'}`}>
+                          {project.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                           <button
-                            className="btn btn-success btn-small"
-                            onClick={() => handleCompleteProject(project)}
+                            className="btn btn-secondary btn-small"
+                            onClick={() => handleEdit(project)}
                           >
-                            Complete
+                            Edit
                           </button>
-                        )}
-                        <button
-                          className="btn btn-danger btn-small"
-                          onClick={() => handleDelete(project.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {project.status === 'active' && (
+                            <button
+                              className="btn btn-success btn-small"
+                              onClick={() => handleCompleteProject(project)}
+                            >
+                              Complete
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-danger btn-small"
+                            onClick={() => handleDelete(project.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -329,6 +439,218 @@ function ContractorProjects() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Client Payment Modal */}
+      {showClientPaymentModal && selectedProjectForPayment && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Add Client Payment</h2>
+              <button className="modal-close" onClick={() => { setShowClientPaymentModal(false); setClientPaymentData({ amount: '', description: '' }); }}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleAddClientPayment}>
+              <div style={{ padding: '20px 0' }}>
+                <div style={{ backgroundColor: '#ebf8ff', padding: '15px', borderRadius: '6px', marginBottom: '20px' }}>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#2c5282' }}>
+                    <strong>Project:</strong> {selectedProjectForPayment.client_name}
+                  </p>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#2c5282' }}>
+                    <strong>Total Charged:</strong> {formatCurrency(selectedProjectForPayment.total_charged_with_vat)} AED
+                  </p>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#2c5282' }}>
+                    <strong>Paid So Far:</strong> {formatCurrency(selectedProjectForPayment.client_paid_total || 0)} AED
+                  </p>
+                  <p style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#c53030' }}>
+                    <strong>Balance Remaining:</strong> {formatCurrency(selectedProjectForPayment.total_charged_with_vat - (selectedProjectForPayment.client_paid_total || 0))} AED
+                  </p>
+                </div>
+
+                <div className="form-group">
+                  <label>Payment Amount (AED) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={clientPaymentData.amount}
+                    onChange={(e) => setClientPaymentData({ ...clientPaymentData, amount: e.target.value })}
+                    placeholder="e.g., 50000"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Description (Optional)</label>
+                  <textarea
+                    value={clientPaymentData.description}
+                    onChange={(e) => setClientPaymentData({ ...clientPaymentData, description: e.target.value })}
+                    rows="2"
+                    placeholder="e.g., Second installment payment"
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowClientPaymentModal(false); setClientPaymentData({ amount: '', description: '' }); }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Record Payment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Contractor Payment Modal */}
+      {showContractorPaymentModal && selectedProjectForPayment && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>Add Contractor Payment</h2>
+              <button className="modal-close" onClick={() => { setShowContractorPaymentModal(false); setContractorPaymentData({ amount: '', description: '' }); }}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleAddContractorPayment}>
+              <div style={{ padding: '20px 0' }}>
+                <div style={{ backgroundColor: '#fffaf0', padding: '15px', borderRadius: '6px', marginBottom: '20px' }}>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#744210' }}>
+                    <strong>Contractor:</strong> {selectedProjectForPayment.contractor_name}
+                  </p>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#744210' }}>
+                    <strong>Agreed Price:</strong> {formatCurrency(selectedProjectForPayment.contractor_price)} AED
+                  </p>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#744210' }}>
+                    <strong>Paid So Far:</strong> {formatCurrency(selectedProjectForPayment.contractor_paid_total || 0)} AED
+                  </p>
+                  <p style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#c53030' }}>
+                    <strong>Balance Owed:</strong> {formatCurrency(selectedProjectForPayment.contractor_price - (selectedProjectForPayment.contractor_paid_total || 0))} AED
+                  </p>
+                </div>
+
+                <div className="form-group">
+                  <label>Payment Amount (AED) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={contractorPaymentData.amount}
+                    onChange={(e) => setContractorPaymentData({ ...contractorPaymentData, amount: e.target.value })}
+                    placeholder="e.g., 50000"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Description (Optional)</label>
+                  <textarea
+                    value={contractorPaymentData.description}
+                    onChange={(e) => setContractorPaymentData({ ...contractorPaymentData, description: e.target.value })}
+                    rows="2"
+                    placeholder="e.g., First installment to contractor"
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowContractorPaymentModal(false); setContractorPaymentData({ amount: '', description: '' }); }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-warning">
+                  Record Payment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Completion Checklist Modal */}
+      {showCompleteModal && completingProject && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h2>Complete Project - Settlement Check</h2>
+              <button className="modal-close" onClick={() => { setShowCompleteModal(false); setCompletingProject(null); }}>
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: '20px 0' }}>
+              <p style={{ marginBottom: '20px', color: '#4a5568' }}>
+                Before completing this project, verify that all payments have been settled:
+              </p>
+
+              {(() => {
+                const clientBalance = completingProject.total_charged_with_vat - (completingProject.client_paid_total || 0);
+                const contractorBalance = completingProject.contractor_price - (completingProject.contractor_paid_total || 0);
+                const clientPaid = clientBalance <= 0.01;
+                const contractorPaid = contractorBalance <= 0.01;
+
+                return (
+                  <>
+                    <div style={{ marginBottom: '20px' }}>
+                      <div style={{ padding: '15px', backgroundColor: clientPaid ? '#f0fdf4' : '#fff5f5', borderRadius: '6px', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ fontSize: '24px' }}>{clientPaid ? '✅' : '❌'}</div>
+                          <div style={{ flex: 1 }}>
+                            <strong>Client Payment Status</strong>
+                            <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#718096' }}>
+                              Total: {formatCurrency(completingProject.total_charged_with_vat)} AED<br />
+                              Paid: {formatCurrency(completingProject.client_paid_total || 0)} AED<br />
+                              <span style={{ color: clientPaid ? '#48bb78' : '#fc8181', fontWeight: 'bold' }}>
+                                Balance: {formatCurrency(clientBalance)} AED
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '15px', backgroundColor: contractorPaid ? '#f0fdf4' : '#fff5f5', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ fontSize: '24px' }}>{contractorPaid ? '✅' : '❌'}</div>
+                          <div style={{ flex: 1 }}>
+                            <strong>Contractor Payment Status</strong>
+                            <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#718096' }}>
+                              Total: {formatCurrency(completingProject.contractor_price)} AED<br />
+                              Paid: {formatCurrency(completingProject.contractor_paid_total || 0)} AED<br />
+                              <span style={{ color: contractorPaid ? '#48bb78' : '#fc8181', fontWeight: 'bold' }}>
+                                Balance: {formatCurrency(contractorBalance)} AED
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(!clientPaid || !contractorPaid) && (
+                      <div style={{ padding: '15px', backgroundColor: '#fff5f5', border: '1px solid #fc8181', borderRadius: '6px', marginTop: '20px' }}>
+                        <strong style={{ color: '#c53030' }}>⚠️ Cannot Complete Project</strong>
+                        <p style={{ margin: '10px 0 0 0', color: '#4a5568', fontSize: '14px' }}>
+                          All payments must be fully settled before completing the project. Use the "+" buttons in the table to record remaining payments.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowCompleteModal(false); setCompletingProject(null); }}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-success"
+                onClick={confirmCompleteProject}
+              >
+                ✓ Complete Project
+              </button>
+            </div>
           </div>
         </div>
       )}
