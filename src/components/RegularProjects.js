@@ -23,6 +23,7 @@ function RegularProjects() {
   // Refs for input focus
   const expenseInputRef = useRef(null);
   const paymentInputRef = useRef(null);
+  const projectNameInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     client_name: '',
@@ -50,13 +51,22 @@ function RegularProjects() {
     loadSettings();
   }, []);
 
-  // Focus inputs when modals open
+  // Focus inputs when modals open (increased delay for first-time modal render)
+  useEffect(() => {
+    if (showModal && projectNameInputRef.current) {
+      setTimeout(() => {
+        projectNameInputRef.current?.focus();
+        projectNameInputRef.current?.select();
+      }, 250);
+    }
+  }, [showModal]);
+
   useEffect(() => {
     if (showExpenseModal && expenseInputRef.current) {
       setTimeout(() => {
         expenseInputRef.current?.focus();
         expenseInputRef.current?.select();
-      }, 100);
+      }, 250);
     }
   }, [showExpenseModal]);
 
@@ -65,7 +75,7 @@ function RegularProjects() {
       setTimeout(() => {
         paymentInputRef.current?.focus();
         paymentInputRef.current?.select();
-      }, 100);
+      }, 250);
     }
   }, [showClientPaymentModal]);
 
@@ -377,9 +387,11 @@ function RegularProjects() {
               <div className="form-group">
                 <label>Client Name *</label>
                 <input
+                  ref={projectNameInputRef}
                   type="text"
                   value={formData.client_name}
                   onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
+                  autoComplete="off"
                   required
                 />
               </div>

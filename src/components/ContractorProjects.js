@@ -18,6 +18,7 @@ function ContractorProjects() {
   // Refs for input focus
   const clientPaymentInputRef = useRef(null);
   const contractorPaymentInputRef = useRef(null);
+  const projectClientNameInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     client_name: '',
@@ -45,13 +46,22 @@ function ContractorProjects() {
     loadProjects();
   }, []);
 
-  // Focus inputs when modals open
+  // Focus inputs when modals open (increased delay for first-time modal render)
+  useEffect(() => {
+    if (showModal && projectClientNameInputRef.current) {
+      setTimeout(() => {
+        projectClientNameInputRef.current?.focus();
+        projectClientNameInputRef.current?.select();
+      }, 250);
+    }
+  }, [showModal]);
+
   useEffect(() => {
     if (showClientPaymentModal && clientPaymentInputRef.current) {
       setTimeout(() => {
         clientPaymentInputRef.current?.focus();
         clientPaymentInputRef.current?.select();
-      }, 100);
+      }, 250);
     }
   }, [showClientPaymentModal]);
 
@@ -60,7 +70,7 @@ function ContractorProjects() {
       setTimeout(() => {
         contractorPaymentInputRef.current?.focus();
         contractorPaymentInputRef.current?.select();
-      }, 100);
+      }, 250);
     }
   }, [showContractorPaymentModal]);
 
@@ -377,9 +387,11 @@ function ContractorProjects() {
               <div className="form-group">
                 <label>Client Name *</label>
                 <input
+                  ref={projectClientNameInputRef}
                   type="text"
                   value={formData.client_name}
                   onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
+                  autoComplete="off"
                   required
                 />
               </div>
