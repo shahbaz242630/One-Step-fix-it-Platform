@@ -60,6 +60,12 @@ ipcMain.handle('delete-project', (event, id) => db.deleteProject(id));
 ipcMain.handle('add-project-expense', (event, projectId, amount, description) =>
   db.addProjectExpense(projectId, amount, description));
 
+// Regular Project Payment Tracking
+ipcMain.handle('add-regular-project-payment', (event, projectId, amount, description) =>
+  db.addRegularProjectPayment(projectId, amount, description));
+ipcMain.handle('get-regular-project-payments', (event, projectId) =>
+  db.getRegularProjectPayments(projectId));
+
 // Company Expenses
 ipcMain.handle('get-all-company-expenses', () => db.getAllCompanyExpenses());
 ipcMain.handle('add-company-expense', (event, expense) => db.addCompanyExpense(expense));

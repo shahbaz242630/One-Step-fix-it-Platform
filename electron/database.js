@@ -161,6 +161,18 @@ async function initializeDatabase() {
   `);
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS regular_project_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      description TEXT,
+      payment_date TEXT DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       starting_balance REAL DEFAULT 0,
@@ -284,6 +296,23 @@ async function initializeDatabase() {
     console.log('Added contractor_paid_total to contractor_projects');
   }
 
+  try {
+    // Check if client_paid_total column exists in projects table
+    const checkProjectPaidStmt = db.prepare("SELECT client_paid_total FROM projects LIMIT 1");
+    checkProjectPaidStmt.step();
+    checkProjectPaidStmt.free();
+  } catch (error) {
+    // Column doesn't exist, add it
+    console.log('Adding client_paid_total column to projects table...');
+    db.run('ALTER TABLE projects ADD COLUMN client_paid_total REAL DEFAULT 0');
+    console.log('Added client_paid_total to projects');
+
+    // Migrate existing advance_paid values to client_paid_total
+    console.log('Migrating existing advance_paid values to client_paid_total...');
+    db.run('UPDATE projects SET client_paid_total = advance_paid WHERE client_paid_total = 0');
+    console.log('Migration complete');
+  }
+
   saveDatabase();
   console.log('Database initialized successfully at:', dbPath);
 }
@@ -365,18 +394,9 @@ function addProject(project) {
   const projectId = result.id;
   idStmt.free();
 
-  // If advance is paid, create VAT record
+  // If advance is paid, create a payment record and it will automatically create VAT record
   if (advance_paid > 0) {
-    const advanceVAT = advance_paid * (5 / 105);
-    const { quarter, year } = getQuarterFromDate(new Date());
-
-    const vatStmt = db.prepare(`
-      INSERT INTO vat_records (project_id, project_type, client_name, payment_amount, vat_amount, quarter, year)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    vatStmt.bind([projectId, 'regular', client_name, advance_paid, advanceVAT, quarter, year]);
-    vatStmt.step();
-    vatStmt.free();
+    addRegularProjectPayment(projectId, advance_paid, 'Initial advance payment');
   }
 
   saveDatabase();
@@ -457,28 +477,7 @@ function updateProject(id, updates) {
   updateStmt.step();
   updateStmt.free();
 
-  // Update VAT records if advance changes
-  if (updates.advance_paid !== undefined && updates.advance_paid !== project.advance_paid) {
-    const advanceVAT = advance_paid * (5 / 105);
-    const { quarter, year } = getQuarterFromDate(new Date());
-
-    // Delete old VAT record for advance
-    const delStmt = db.prepare('DELETE FROM vat_records WHERE project_id = ? AND project_type = ?');
-    delStmt.bind([id, 'regular']);
-    delStmt.step();
-    delStmt.free();
-
-    // Create new one if advance > 0
-    if (advance_paid > 0) {
-      const vatStmt = db.prepare(`
-        INSERT INTO vat_records (project_id, project_type, client_name, payment_amount, vat_amount, quarter, year)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `);
-      vatStmt.bind([id, 'regular', project.client_name, advance_paid, advanceVAT, quarter, year]);
-      vatStmt.step();
-      vatStmt.free();
-    }
-  }
+  // Note: VAT records are now managed through payment records, not through advance_paid updates
 
   // Create PM payment record if project completed
   if (status === 'completed' && project.status !== 'completed' && num_project_managers > 0) {
@@ -522,6 +521,12 @@ function deleteProject(id) {
   expStmt.bind([id]);
   expStmt.step();
   expStmt.free();
+
+  // Delete regular project payments
+  const paymentsStmt = db.prepare('DELETE FROM regular_project_payments WHERE project_id = ?');
+  paymentsStmt.bind([id]);
+  paymentsStmt.step();
+  paymentsStmt.free();
 
   // Delete PM payments
   const pmStmt = db.prepare('DELETE FROM pm_payments WHERE project_id = ?');
@@ -584,6 +589,59 @@ function addProjectExpense(projectId, amount, description) {
 
   saveDatabase();
   return expenseId;
+}
+
+// ========== REGULAR PROJECT PAYMENT TRACKING ==========
+
+function addRegularProjectPayment(projectId, amount, description) {
+  const stmt = db.prepare(`
+    INSERT INTO regular_project_payments (project_id, amount, description, payment_date)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.bind([projectId, amount, description || '', new Date().toISOString()]);
+  stmt.step();
+  stmt.free();
+
+  // Update project total
+  const updateStmt = db.prepare('UPDATE projects SET client_paid_total = client_paid_total + ? WHERE id = ?');
+  updateStmt.bind([amount, projectId]);
+  updateStmt.step();
+  updateStmt.free();
+
+  // Create VAT record for this payment
+  const vatAmount = amount * (5 / 105);
+  const { quarter, year } = getQuarterFromDate(new Date());
+
+  // Get project info
+  const projectStmt = db.prepare('SELECT client_name FROM projects WHERE id = ?');
+  projectStmt.bind([projectId]);
+  projectStmt.step();
+  const project = projectStmt.getAsObject();
+  projectStmt.free();
+
+  const vatStmt = db.prepare(`
+    INSERT INTO vat_records (project_id, project_type, client_name, payment_amount, vat_amount, quarter, year)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  vatStmt.bind([projectId, 'regular', project.client_name, amount, vatAmount, quarter, year]);
+  vatStmt.step();
+  vatStmt.free();
+
+  saveDatabase();
+  return true;
+}
+
+function getRegularProjectPayments(projectId) {
+  const stmt = db.prepare('SELECT * FROM regular_project_payments WHERE project_id = ? ORDER BY payment_date DESC');
+  stmt.bind([projectId]);
+
+  const payments = [];
+  while (stmt.step()) {
+    payments.push(stmt.getAsObject());
+  }
+  stmt.free();
+
+  return payments;
 }
 
 // ========== COMPANY EXPENSES ==========
@@ -1058,8 +1116,8 @@ function getDashboardStats() {
   const initial_deposits = settings.initial_deposits || 0;
   const initial_vat = settings.initial_vat || 0;
 
-  // Get all advances and payments
-  const projStmt = db.prepare('SELECT SUM(advance_paid) as total FROM projects');
+  // Get all advances and payments (for bank balance - all cash received)
+  const projStmt = db.prepare('SELECT SUM(client_paid_total) as total FROM projects');
   projStmt.step();
   const projectPayments = projStmt.getAsObject();
   projStmt.free();
@@ -1070,13 +1128,25 @@ function getDashboardStats() {
   const contractorClientPayments = contrClientStmt.getAsObject();
   contrClientStmt.free();
 
+  // Get deposits from ACTIVE projects only (money that still needs to be earned)
+  const activeProjectsStmt = db.prepare('SELECT SUM(client_paid_total) as total FROM projects WHERE status = "active"');
+  activeProjectsStmt.step();
+  const activeProjectDeposits = activeProjectsStmt.getAsObject();
+  activeProjectsStmt.free();
+
+  const activeContractorStmt = db.prepare('SELECT SUM(client_paid_total) as total FROM contractor_projects WHERE status = "active"');
+  activeContractorStmt.step();
+  const activeContractorDeposits = activeContractorStmt.getAsObject();
+  activeContractorStmt.free();
+
   // Get contractor payments (cash paid OUT to contractors)
   const contrPaymentsStmt = db.prepare('SELECT SUM(contractor_paid_total) as total FROM contractor_projects');
   contrPaymentsStmt.step();
   const contractorPaymentsOut = contrPaymentsStmt.getAsObject();
   contrPaymentsStmt.free();
 
-  const totalDeposits = (projectPayments.total || 0) + (contractorClientPayments.total || 0) + initial_deposits;
+  // Total deposits = only ACTIVE project deposits + initial deposits
+  const totalDeposits = (activeProjectDeposits.total || 0) + (activeContractorDeposits.total || 0) + initial_deposits;
 
   // Get company expenses
   const compExpStmt = db.prepare('SELECT SUM(amount) as total FROM company_expenses');
@@ -1535,6 +1605,8 @@ module.exports = {
   updateProject,
   deleteProject,
   addProjectExpense,
+  addRegularProjectPayment,
+  getRegularProjectPayments,
   getAllCompanyExpenses,
   addCompanyExpense,
   updateCompanyExpense,

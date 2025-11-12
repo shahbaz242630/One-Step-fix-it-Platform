@@ -13,6 +13,8 @@ function RegularProjects() {
   const [completingProject, setCompletingProject] = useState(null);
   const [numPMs, setNumPMs] = useState(0);
   const [pmSelection, setPmSelection] = useState('none'); // 'none', 'pm1', 'pm2', 'both'
+  const [showClientPaymentModal, setShowClientPaymentModal] = useState(false);
+  const [selectedProjectForPayment, setSelectedProjectForPayment] = useState(null);
   const [settings, setSettings] = useState({
     pm1_name: 'Project Manager 1',
     pm2_name: 'Project Manager 2'
@@ -30,6 +32,11 @@ function RegularProjects() {
   });
 
   const [expenseData, setExpenseData] = useState({
+    amount: '',
+    description: ''
+  });
+
+  const [clientPaymentData, setClientPaymentData] = useState({
     amount: '',
     description: ''
   });
@@ -99,6 +106,26 @@ function RegularProjects() {
       loadProjects();
     } catch (error) {
       console.error('Error adding expense:', error);
+    }
+  };
+
+  const handleOpenClientPayment = (project) => {
+    setSelectedProjectForPayment(project);
+    setClientPaymentData({ amount: '', description: '' });
+    setShowClientPaymentModal(true);
+  };
+
+  const handleAddClientPayment = async (e) => {
+    e.preventDefault();
+    try {
+      await ipcRenderer.invoke('add-regular-project-payment', selectedProjectForPayment.id, parseFloat(clientPaymentData.amount), clientPaymentData.description);
+      setShowClientPaymentModal(false);
+      setClientPaymentData({ amount: '', description: '' });
+      loadProjects();
+      alert('Client payment recorded successfully!');
+    } catch (error) {
+      console.error('Error adding client payment:', error);
+      alert('Error recording payment');
     }
   };
 
@@ -212,61 +239,75 @@ function RegularProjects() {
                 <th>Total Value (with VAT)</th>
                 <th>VAT (5%)</th>
                 <th>Project Value</th>
-                <th>Advance Paid</th>
+                <th>Client Paid</th>
+                <th>Client Balance</th>
                 <th>Expenses</th>
-                <th>Balance Due</th>
                 <th>Company Profit</th>
                 <th>Status</th>
-                <th>VAT Collected</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {projects.length === 0 ? (
                 <tr>
-                  <td colSpan="13" style={{ textAlign: 'center', padding: '40px', color: '#718096' }}>
+                  <td colSpan="12" style={{ textAlign: 'center', padding: '40px', color: '#718096' }}>
                     No projects yet. Add your first project!
                   </td>
                 </tr>
               ) : (
-                projects.map((project) => (
-                  <tr key={project.id}>
-                    <td><strong>{project.client_name}</strong></td>
-                    <td>{project.address}</td>
-                    <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {project.project_details}
-                    </td>
-                    <td>{formatCurrency(project.total_value_with_vat)}</td>
-                    <td style={{ color: '#f6ad55' }}>{formatCurrency(project.vat_amount)}</td>
-                    <td>{formatCurrency(project.project_value)}</td>
-                    <td style={{ color: '#4299e1' }}>{formatCurrency(project.advance_paid)}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span>{formatCurrency(project.total_expenses)}</span>
-                        <button
-                          className="btn btn-secondary btn-small"
-                          onClick={() => openExpenseModal(project.id)}
-                          title="Add Expense"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </td>
-                    <td>{formatCurrency(project.balance_due)}</td>
-                    <td style={{ color: project.company_profit >= 0 ? '#48bb78' : '#fc8181', fontWeight: 'bold' }}>
-                      {formatCurrency(project.company_profit)}
-                    </td>
-                    <td>
-                      <span className={`badge ${project.status === 'completed' ? 'badge-success' : 'badge-info'}`}>
-                        {project.status}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${project.vat_collected ? 'badge-success' : 'badge-warning'}`}>
-                        {project.vat_collected ? 'Yes' : 'Pending'}
-                      </span>
-                    </td>
-                    <td>
+                projects.map((project) => {
+                  const clientPaid = project.client_paid_total || 0;
+                  const clientBalance = project.total_value_with_vat - clientPaid;
+
+                  return (
+                    <tr key={project.id}>
+                      <td><strong>{project.client_name}</strong></td>
+                      <td>{project.address}</td>
+                      <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {project.project_details}
+                      </td>
+                      <td>{formatCurrency(project.total_value_with_vat)}</td>
+                      <td style={{ color: '#f6ad55' }}>{formatCurrency(project.vat_amount)}</td>
+                      <td>{formatCurrency(project.project_value)}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ color: '#4299e1', fontWeight: 'bold' }}>{formatCurrency(clientPaid)}</span>
+                          {project.status === 'active' && (
+                            <button
+                              className="btn btn-success"
+                              style={{ padding: '2px 8px', fontSize: '16px' }}
+                              onClick={() => handleOpenClientPayment(project)}
+                              title="Add client payment"
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ color: clientBalance > 0 ? '#fc8181' : '#48bb78', fontWeight: 'bold' }}>
+                        {formatCurrency(clientBalance)}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span>{formatCurrency(project.total_expenses)}</span>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => openExpenseModal(project.id)}
+                            title="Add Expense"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </td>
+                      <td style={{ color: project.company_profit >= 0 ? '#48bb78' : '#fc8181', fontWeight: 'bold' }}>
+                        {formatCurrency(project.company_profit)}
+                      </td>
+                      <td>
+                        <span className={`badge ${project.status === 'completed' ? 'badge-success' : 'badge-info'}`}>
+                          {project.status}
+                        </span>
+                      </td>
+                      <td>
                       <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                         <button
                           className="btn btn-secondary btn-small"
@@ -291,7 +332,8 @@ function RegularProjects() {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -415,6 +457,49 @@ function RegularProjects() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Add Expense
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Client Payment Modal */}
+      {showClientPaymentModal && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2>Add Client Payment</h2>
+              <button className="modal-close" onClick={() => { setShowClientPaymentModal(false); setClientPaymentData({ amount: '', description: '' }); }}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleAddClientPayment}>
+              <div className="form-group">
+                <label>Amount *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={clientPaymentData.amount}
+                  onChange={(e) => setClientPaymentData({ ...clientPaymentData, amount: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  value={clientPaymentData.description}
+                  onChange={(e) => setClientPaymentData({ ...clientPaymentData, description: e.target.value })}
+                  rows="2"
+                  placeholder="e.g., Second installment, Final payment"
+                />
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowClientPaymentModal(false); setClientPaymentData({ amount: '', description: '' }); }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-success">
+                  Add Payment
                 </button>
               </div>
             </form>
