@@ -440,6 +440,8 @@ function RegularProjects() {
                   step="0.01"
                   value={expenseData.amount}
                   onChange={(e) => setExpenseData({ ...expenseData, amount: e.target.value })}
+                  autoFocus
+                  autoComplete="off"
                   required
                 />
               </div>
@@ -482,6 +484,8 @@ function RegularProjects() {
                   step="0.01"
                   value={clientPaymentData.amount}
                   onChange={(e) => setClientPaymentData({ ...clientPaymentData, amount: e.target.value })}
+                  autoFocus
+                  autoComplete="off"
                   required
                 />
               </div>

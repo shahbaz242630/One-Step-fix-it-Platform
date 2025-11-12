@@ -234,7 +234,7 @@ function ContractorProjects() {
                 <th>Client Paid</th>
                 <th>Client Balance</th>
                 <th>Contractor Price</th>
-                <th>Contractor Paid</th>
+                <th>Paid to Contractor</th>
                 <th>Contractor Balance</th>
                 <th>Company Profit</th>
                 <th>Status</th>
@@ -478,6 +478,8 @@ function ContractorProjects() {
                     value={clientPaymentData.amount}
                     onChange={(e) => setClientPaymentData({ ...clientPaymentData, amount: e.target.value })}
                     placeholder="e.g., 50000"
+                    autoFocus
+                    autoComplete="off"
                     required
                   />
                 </div>
@@ -541,6 +543,8 @@ function ContractorProjects() {
                     value={contractorPaymentData.amount}
                     onChange={(e) => setContractorPaymentData({ ...contractorPaymentData, amount: e.target.value })}
                     placeholder="e.g., 50000"
+                    autoFocus
+                    autoComplete="off"
                     required
                   />
                 </div>
