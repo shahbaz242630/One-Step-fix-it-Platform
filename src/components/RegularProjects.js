@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -19,6 +19,10 @@ function RegularProjects() {
     pm1_name: 'Project Manager 1',
     pm2_name: 'Project Manager 2'
   });
+
+  // Refs for input focus
+  const expenseInputRef = useRef(null);
+  const paymentInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     client_name: '',
@@ -45,6 +49,25 @@ function RegularProjects() {
     loadProjects();
     loadSettings();
   }, []);
+
+  // Focus inputs when modals open
+  useEffect(() => {
+    if (showExpenseModal && expenseInputRef.current) {
+      setTimeout(() => {
+        expenseInputRef.current?.focus();
+        expenseInputRef.current?.select();
+      }, 100);
+    }
+  }, [showExpenseModal]);
+
+  useEffect(() => {
+    if (showClientPaymentModal && paymentInputRef.current) {
+      setTimeout(() => {
+        paymentInputRef.current?.focus();
+        paymentInputRef.current?.select();
+      }, 100);
+    }
+  }, [showClientPaymentModal]);
 
   const loadSettings = async () => {
     try {
@@ -436,11 +459,13 @@ function RegularProjects() {
               <div className="form-group">
                 <label>Amount *</label>
                 <input
-                  type="number"
-                  step="0.01"
+                  ref={expenseInputRef}
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*\.?[0-9]*"
                   value={expenseData.amount}
                   onChange={(e) => setExpenseData({ ...expenseData, amount: e.target.value })}
-                  autoFocus
+                  placeholder="Enter amount (e.g., 50000)"
                   autoComplete="off"
                   required
                 />
@@ -480,11 +505,13 @@ function RegularProjects() {
               <div className="form-group">
                 <label>Amount *</label>
                 <input
-                  type="number"
-                  step="0.01"
+                  ref={paymentInputRef}
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*\.?[0-9]*"
                   value={clientPaymentData.amount}
                   onChange={(e) => setClientPaymentData({ ...clientPaymentData, amount: e.target.value })}
-                  autoFocus
+                  placeholder="Enter amount (e.g., 50000)"
                   autoComplete="off"
                   required
                 />

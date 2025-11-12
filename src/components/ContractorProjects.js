@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -14,6 +14,10 @@ function ContractorProjects() {
   const [selectedProjectForPayment, setSelectedProjectForPayment] = useState(null);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completingProject, setCompletingProject] = useState(null);
+
+  // Refs for input focus
+  const clientPaymentInputRef = useRef(null);
+  const contractorPaymentInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     client_name: '',
@@ -40,6 +44,25 @@ function ContractorProjects() {
   useEffect(() => {
     loadProjects();
   }, []);
+
+  // Focus inputs when modals open
+  useEffect(() => {
+    if (showClientPaymentModal && clientPaymentInputRef.current) {
+      setTimeout(() => {
+        clientPaymentInputRef.current?.focus();
+        clientPaymentInputRef.current?.select();
+      }, 100);
+    }
+  }, [showClientPaymentModal]);
+
+  useEffect(() => {
+    if (showContractorPaymentModal && contractorPaymentInputRef.current) {
+      setTimeout(() => {
+        contractorPaymentInputRef.current?.focus();
+        contractorPaymentInputRef.current?.select();
+      }, 100);
+    }
+  }, [showContractorPaymentModal]);
 
   const loadProjects = async () => {
     try {
@@ -473,12 +496,13 @@ function ContractorProjects() {
                 <div className="form-group">
                   <label>Payment Amount (AED) *</label>
                   <input
-                    type="number"
-                    step="0.01"
+                    ref={clientPaymentInputRef}
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*\.?[0-9]*"
                     value={clientPaymentData.amount}
                     onChange={(e) => setClientPaymentData({ ...clientPaymentData, amount: e.target.value })}
                     placeholder="e.g., 50000"
-                    autoFocus
                     autoComplete="off"
                     required
                   />
@@ -538,12 +562,13 @@ function ContractorProjects() {
                 <div className="form-group">
                   <label>Payment Amount (AED) *</label>
                   <input
-                    type="number"
-                    step="0.01"
+                    ref={contractorPaymentInputRef}
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*\.?[0-9]*"
                     value={contractorPaymentData.amount}
                     onChange={(e) => setContractorPaymentData({ ...contractorPaymentData, amount: e.target.value })}
                     placeholder="e.g., 50000"
-                    autoFocus
                     autoComplete="off"
                     required
                   />
