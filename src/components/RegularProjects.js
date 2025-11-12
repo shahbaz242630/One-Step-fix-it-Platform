@@ -54,28 +54,41 @@ function RegularProjects() {
   // Focus inputs when modals open (increased delay for first-time modal render)
   useEffect(() => {
     if (showModal && projectNameInputRef.current) {
-      setTimeout(() => {
-        projectNameInputRef.current?.focus();
-        projectNameInputRef.current?.select();
-      }, 250);
+      // Use requestAnimationFrame + setTimeout for reliable focus
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          projectNameInputRef.current?.focus();
+          projectNameInputRef.current?.select();
+        }, 150);
+      });
     }
   }, [showModal]);
 
   useEffect(() => {
     if (showExpenseModal && expenseInputRef.current) {
-      setTimeout(() => {
-        expenseInputRef.current?.focus();
-        expenseInputRef.current?.select();
-      }, 250);
+      // Expense modal is simple, use double RAF for smooth focus
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            expenseInputRef.current?.focus();
+            expenseInputRef.current?.select();
+          }, 100);
+        });
+      });
     }
   }, [showExpenseModal]);
 
   useEffect(() => {
     if (showClientPaymentModal && paymentInputRef.current) {
-      setTimeout(() => {
-        paymentInputRef.current?.focus();
-        paymentInputRef.current?.select();
-      }, 250);
+      // Payment modal has complex content, needs more time
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            paymentInputRef.current?.focus();
+            paymentInputRef.current?.select();
+          }, 100);
+        });
+      });
     }
   }, [showClientPaymentModal]);
 

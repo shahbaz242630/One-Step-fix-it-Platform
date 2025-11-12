@@ -49,28 +49,41 @@ function ContractorProjects() {
   // Focus inputs when modals open (increased delay for first-time modal render)
   useEffect(() => {
     if (showModal && projectClientNameInputRef.current) {
-      setTimeout(() => {
-        projectClientNameInputRef.current?.focus();
-        projectClientNameInputRef.current?.select();
-      }, 250);
+      // Use requestAnimationFrame + setTimeout for reliable focus
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          projectClientNameInputRef.current?.focus();
+          projectClientNameInputRef.current?.select();
+        }, 150);
+      });
     }
   }, [showModal]);
 
   useEffect(() => {
     if (showClientPaymentModal && clientPaymentInputRef.current) {
-      setTimeout(() => {
-        clientPaymentInputRef.current?.focus();
-        clientPaymentInputRef.current?.select();
-      }, 250);
+      // Payment modal has complex content (info boxes), needs double RAF
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            clientPaymentInputRef.current?.focus();
+            clientPaymentInputRef.current?.select();
+          }, 100);
+        });
+      });
     }
   }, [showClientPaymentModal]);
 
   useEffect(() => {
     if (showContractorPaymentModal && contractorPaymentInputRef.current) {
-      setTimeout(() => {
-        contractorPaymentInputRef.current?.focus();
-        contractorPaymentInputRef.current?.select();
-      }, 250);
+      // Payment modal has complex content (info boxes), needs double RAF
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            contractorPaymentInputRef.current?.focus();
+            contractorPaymentInputRef.current?.select();
+          }, 100);
+        });
+      });
     }
   }, [showContractorPaymentModal]);
 
